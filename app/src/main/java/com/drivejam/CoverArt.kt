@@ -4,10 +4,14 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorFilter
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.PixelFormat
+import android.graphics.RadialGradient
 import android.graphics.Shader
+import android.graphics.drawable.Drawable
 import android.util.AttributeSet
 import android.view.View
 
@@ -69,6 +73,32 @@ object CoverArt {
         }
         return bmp
     }
+}
+
+/** Album-coloured backdrop: two soft glows of the cover's colours on a dark base, dimmed so white text stays readable. */
+class Ambient(private val c0: Int, private val c1: Int) : Drawable() {
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    private var a = 255
+
+    override fun draw(c: Canvas) {
+        val b = bounds; val w = b.width().toFloat(); val h = b.height().toFloat()
+        val save = c.saveLayerAlpha(b.left.toFloat(), b.top.toFloat(), b.right.toFloat(), b.bottom.toFloat(), a) // honours crossfade alpha
+        c.drawColor(0xFF14121F.toInt())
+        for ((col, x, y, r) in listOf(Glow(c0, 0.22f, 0.30f, 0.60f), Glow(c1, 0.85f, 0.80f, 0.65f))) {
+            p.shader = RadialGradient(b.left + w * x, b.top + h * y, w * r, col, col and 0x00FFFFFF, Shader.TileMode.CLAMP)
+            c.drawRect(b, p)
+        }
+        p.shader = null
+        c.drawColor(0x610C0A18) // dim: rgba(12,10,24,.38)
+        c.restoreToCount(save)
+    }
+
+    private data class Glow(val color: Int, val x: Float, val y: Float, val r: Float)
+
+    override fun setAlpha(alpha: Int) { a = alpha; invalidateSelf() }
+    override fun setColorFilter(cf: ColorFilter?) {}
+    @Deprecated("Deprecated in Java")
+    override fun getOpacity() = PixelFormat.TRANSLUCENT
 }
 
 /** Prev / play / pause / next glyphs drawn as paths (no reliance on emoji fonts in the car). */

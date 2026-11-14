@@ -24,7 +24,7 @@ TASKBAR_ICON = (1482, 1370)  # Drive Jam icon in the Pleos taskbar (2560x1440)
 DURATION = 100
 # Show only the Drive Jam panel (the console's own driving sim drives the cluster speedometer, which would
 # disagree with the scripted speed); 1920x1080 recording -> app panel -> padded 1080p.
-CROP = "crop=1250:705:640:66,scale=-2:940,pad=1920:1080:(ow-iw)/2:0:color=0x0E1116"  # captions go in the 140px strip
+CROP = "crop=1260:906:640:68,scale=-2:940,pad=1920:1080:(ow-iw)/2:0:color=0x14121F"  # captions go in the 140px strip
 
 # (start, end, caption) — seconds from recording start
 CAPTIONS = [
