@@ -46,8 +46,6 @@ class SignalHub(private val ctx: Context, private val s: DriveState) {
     private val failed = mutableSetOf<String>()
 
     private val front = WindowArea(WindowValue.FRONT_WINDSHIELD)
-    private var lastTripKm = -1f
-    private var lastTripAt = 0L
     private val speedLog = ArrayDeque<Pair<Long, Float>>()
 
     fun start() {
@@ -75,7 +73,7 @@ class SignalHub(private val ctx: Context, private val s: DriveState) {
         reg("핸들", { v.getSteeringWheel().registerSteeringWheelAngle(steer) }, { v.getSteeringWheel().unregisterSteeringWheelAngle(steer) })
 
         val brake = object : BrakePedalStatusListener {
-            override fun onBrakePedalStatusUpdated(pressed: Boolean?) { s.brake = pressed == true }
+            override fun onBrakePedalStatusUpdated(pressed: Boolean?) { s.brake = pressed == true; Log.d("DriveJam", "brake event $pressed") }
             override fun onFailed(e: Exception) = fail("브레이크", e)
         }
         reg("브레이크", { v.getBrake().registerBrakePedalStatus(brake) }, { v.getBrake().unregisterBrakePedalStatus(brake) })
@@ -130,9 +128,10 @@ class SignalHub(private val ctx: Context, private val s: DriveState) {
     fun tick(now: Long) {
         pollOdometer(now)
         speedLog.addLast(now to s.speedKmh)
-        while (speedLog.isNotEmpty() && now - speedLog.first().first > 1500) speedLog.removeFirst()
+        while (speedLog.isNotEmpty() && now - speedLog.first().first > 2000) speedLog.removeFirst()
         val peak = speedLog.maxOf { it.second }
-        // ponytail: 25 km/h drop in 1.5 s (~0.5 g) while braking = hard brake; tune on a real car.
+        if (now / 1000 != lastLogSec) { lastLogSec = now / 1000; Log.d("DriveJam", "speed=${s.speedKmh.toInt()} brake=${s.brake}") }
+        // ponytail: 25 km/h drop within 2 s (~0.35-0.5 g after smoothing) while braking = hard brake; tune on a real car.
         if (s.brake && peak - s.speedKmh >= 25f && now > s.scratchUntil + 4000) {
             s.scratchUntil = now + 600
             Log.i("DriveJam", "hard brake ${peak.toInt()} -> ${s.speedKmh.toInt()} km/h")
@@ -148,13 +147,20 @@ class SignalHub(private val ctx: Context, private val s: DriveState) {
 
     val failures: Set<String> get() = failed
 
+    private val odoLog = ArrayDeque<Pair<Long, Float>>()
+    private var lastLogSec = 0L
+
+    /** Speed = distance over the last ~2 s of odometer samples: robust to late or bursty updates. */
     private fun onTrip(km: Float) {
         val now = System.currentTimeMillis()
-        if (lastTripKm >= 0f && now - lastTripAt >= 500 && !s.speedFromDev) {
-            val inst = (km - lastTripKm) / ((now - lastTripAt) / 3_600_000f)
-            if (inst in 0f..250f) s.speedKmh += (inst - s.speedKmh) * 0.6f
+        synchronized(odoLog) {
+            odoLog.addLast(now to km)
+            while (odoLog.size > 2 && now - odoLog.first().first > 2000) odoLog.removeFirst()
+            val (t0, k0) = odoLog.first()
+            if (s.speedFromDev || now - t0 < 1000) return
+            val v = (km - k0) / ((now - t0) / 3_600_000f)
+            if (v in 0f..250f) s.speedKmh += (v - s.speedKmh) * 0.7f
         }
-        if (lastTripKm < 0f || now - lastTripAt >= 500) { lastTripKm = km; lastTripAt = now }
     }
 
     private fun readWiperSwitch(v: Vehicle) = runCatching {

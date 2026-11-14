@@ -22,6 +22,9 @@ OUT = Path(__file__).parent / "out"
 FONT = "C\\:/Windows/Fonts/malgunbd.ttf"  # escaped for ffmpeg drawtext
 TASKBAR_ICON = (1482, 1370)  # Drive Jam icon in the Pleos taskbar (2560x1440)
 DURATION = 100
+# Show only the Drive Jam panel (the console's own driving sim drives the cluster speedometer, which would
+# disagree with the scripted speed); 1920x1080 recording -> app panel -> padded 1080p.
+CROP = "crop=1250:705:640:66,scale=-2:940,pad=1920:1080:(ow-iw)/2:0:color=0x0E1116"  # captions go in the 140px strip
 
 # (start, end, caption) — seconds from recording start
 CAPTIONS = [
@@ -31,13 +34,13 @@ CAPTIONS = [
     (20, 30, "출발 · 차속(주행거리 변화로 계산)에 따라 템포가 움직입니다"),
     (30, 39, "차선 변경 · 깜빡이 = 하이햇, 핸들 = 필터와 소리 방향"),
     (39, 49, "비가 온다 · 와이퍼 Low → High = 빗소리가 촘촘해집니다"),
-    (49, 58, "마음에 안 들면 ⏭ · 다른 장르의 새 곡으로 (스티어링 휠 버튼도 됩니다)"),
+    (49, 58, "마음에 안 들면 '다음 곡' · 다른 장르의 새 곡으로 (스티어링 휠 버튼도 됩니다)"),
     (58, 64, "터널 진입 · 전조등 ON = 밤 → 조금 차분하게"),
     (64, 72, "고속도로 100 km/h · 템포에는 상한, 소리는 먹먹하게"),
     (72, 78, "앞차 급정거 · 브레이크 + 차속 급감 → 곡이 '멈칫'했다가 이어집니다"),
     (78, 86, "주행 중에는 버튼 하나로 · '더 차분하게'"),
     (86, 94, "도착 · 감속하고 기어 P — 잼이 끝납니다"),
-    (94, 100, "드라이브 잼 — 무슨 노래 틀지? 이제 차가 정합니다"),
+    (94, 100, "드라이브 잼 — 내 운전이 그대로 음악이 됩니다"),
 ]
 
 # speed keyframes (t, km/h); linear in between
@@ -97,6 +100,10 @@ def bring_app_to_front():
 
 def main():
     OUT.mkdir(exist_ok=True)
+    try:
+        put("/vehicle/gear?gear=Park")
+    except OSError as e:  # 503 emulator_inactive: the Virtual Console page must be open in a browser
+        raise SystemExit(f"Virtual Console not reachable ({e}). Open http://127.0.0.1:8088/ in a browser first.")
     # 1) reset the car
     for p in ["/vehicle/gear?gear=Park", "/vehicle/turn-signal?mode=Off", "/vehicle/body?front_wiper=Off",
               "/vehicle/lights?feature=headlamp_mode&value=Off", "/vehicle/controls?brake=0",
@@ -107,6 +114,7 @@ def main():
     adb("shell", "am", "force-stop", PKG)
     intent("--ez", "demo", "true", "--es", "company", "FRIENDS", "--es", "feeling", "TIRED")
     time.sleep(4)
+    adb("shell", "input", "keyevent", "111")  # ESC: close any system popup (e.g. the profile menu)
     bring_app_to_front()
     time.sleep(1)
 
@@ -154,7 +162,7 @@ def main():
             last = now
             try:
                 put(f"/vehicle/odometer?traveled_distance_km={km:.4f}")
-                put(f"/vehicle/controls?speed={v:.0f}")
+                # no /vehicle/controls?speed=…: it re-publishes every control and releases the brake
             except OSError as e:
                 print("odometer put failed:", e)
             time.sleep(0.25)
@@ -200,25 +208,25 @@ def main():
 
     # 5) mux: place the WAV exactly where the engine rendered it and stretch it onto wall-clock time
     import re
-    log = adb("logcat", "-d", "-s", "DriveJam:I").stdout
+    log = adb("logcat", "-d", "-s", "DriveJam:D").stdout
     ws, we = (int(re.search(rf"wav {k} (\d+)", log).group(1)) / 1000.0 for k in ("start", "end"))
     start = ws - clock_offset - t0
     tempo = audio_sec / (we - ws)
     print(f"wav starts at {start:.2f}s, atempo {tempo:.3f}")
     for line in log.splitlines():
-        if "hard brake" in line:
+        if "hard brake" in line or "brake event" in line or ("speed=" in line and "brake=true" in line):
             print("app:", line.split("DriveJam:", 1)[-1].strip())
     delay_ms = int(max(0.0, start) * 1000)
     for i, (_, _, c) in enumerate(CAPTIONS):
         (OUT / f"cap{i}.txt").write_text(c, encoding="utf-8")
     draw = ",".join(
-        f"drawtext=fontfile='{FONT}':textfile=cap{i}.txt:enable='between(t,{a},{b})':x=(w-text_w)/2:y=h-110:"
+        f"drawtext=fontfile='{FONT}':textfile=cap{i}.txt:enable='between(t,{a},{b})':x=(w-text_w)/2:y=h-98:"
         f"fontsize=40:fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=18"
         for i, (a, b, _) in enumerate(CAPTIONS)
     )
     subprocess.run([
         "ffmpeg", "-y", "-v", "error", "-i", video.name, "-i", wav.name,
-        "-filter_complex", f"[0:v]fps=30,{draw}[v];[1:a]atempo={tempo:.4f},adelay={delay_ms}|{delay_ms},apad[a]",
+        "-filter_complex", f"[0:v]fps=30,{CROP},{draw}[v];[1:a]atempo={tempo:.4f},adelay={delay_ms}|{delay_ms},apad[a]",
         "-map", "[v]", "-map", "[a]", "-t", str(DURATION), "-c:v", "libx264", "-preset", "medium", "-crf", "20",
         "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", final.name,
     ], check=True, cwd=OUT)
