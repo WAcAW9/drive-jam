@@ -1,0 +1,13 @@
+# personal data (application form, contacts) — never publish
+submission/
+
+# Android / Gradle
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+.kotlin/
+captures/
+*.keystore
+*.jks
