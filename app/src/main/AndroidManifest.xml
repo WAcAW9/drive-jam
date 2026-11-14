@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-feature
+        android:name="android.hardware.type.automotive"
+        android:required="true" />
+
+    <!-- Vehicle SDK read permissions (verified against the SDK 2.3.2 impl classes) -->
+    <uses-permission android:name="pleos.car.permission.CAR_LIGHTS" />   <!-- TurnSignal, Light -->
+    <uses-permission android:name="pleos.car.permission.CAR_DRIVE" />    <!-- SteeringWheel angle, Brake, Odometer, DrivingMode, Gear -->
+    <uses-permission android:name="pleos.car.permission.CAR_WINDOWS" />  <!-- Wiper -->
+
+    <application
+        android:allowBackup="false"
+        android:appCategory="audio"
+        android:label="드라이브 잼"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:screenOrientation="unspecified">
+            <!-- AAOS: allowed on screen while driving (UI is a static now-playing view) -->
+            <meta-data
+                android:name="distractionOptimized"
+                android:value="true" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
