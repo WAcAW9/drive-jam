@@ -117,11 +117,10 @@ class SignalHub(private val ctx: Context, private val s: DriveState) {
 
     private fun pollOdometer(now: Long) {
         val v = vehicle ?: return
-        if (now - lastPoll < 1000) return
+        if (now - lastPoll < 500) return
         lastPoll = now
         runCatching {
             v.getOdometer().getCurrentDistanceDriven({ km: Float? ->
-                Log.d("DriveJam", "odometer=$km")
                 if (km != null) onTrip(km)
             }, { e: Exception -> fail("주행거리", e) })
         }
@@ -133,8 +132,11 @@ class SignalHub(private val ctx: Context, private val s: DriveState) {
         speedLog.addLast(now to s.speedKmh)
         while (speedLog.isNotEmpty() && now - speedLog.first().first > 1500) speedLog.removeFirst()
         val peak = speedLog.maxOf { it.second }
-        // ponytail: 15 km/h drop in 1.5 s while braking = hard brake; tune on a real car.
-        if (s.brake && peak - s.speedKmh >= 15f && now > s.scratchUntil + 2000) s.scratchUntil = now + 600
+        // ponytail: 25 km/h drop in 1.5 s (~0.5 g) while braking = hard brake; tune on a real car.
+        if (s.brake && peak - s.speedKmh >= 25f && now > s.scratchUntil + 4000) {
+            s.scratchUntil = now + 600
+            Log.i("DriveJam", "hard brake ${peak.toInt()} -> ${s.speedKmh.toInt()} km/h")
+        }
     }
 
     fun release() {
@@ -148,11 +150,11 @@ class SignalHub(private val ctx: Context, private val s: DriveState) {
 
     private fun onTrip(km: Float) {
         val now = System.currentTimeMillis()
-        if (lastTripKm >= 0f && now - lastTripAt >= 1000 && !s.speedFromDev) {
+        if (lastTripKm >= 0f && now - lastTripAt >= 500 && !s.speedFromDev) {
             val inst = (km - lastTripKm) / ((now - lastTripAt) / 3_600_000f)
-            if (inst in 0f..250f) s.speedKmh += (inst - s.speedKmh) * 0.3f
+            if (inst in 0f..250f) s.speedKmh += (inst - s.speedKmh) * 0.6f
         }
-        if (lastTripKm < 0f || now - lastTripAt >= 1000) { lastTripKm = km; lastTripAt = now }
+        if (lastTripKm < 0f || now - lastTripAt >= 500) { lastTripKm = km; lastTripAt = now }
     }
 
     private fun readWiperSwitch(v: Vehicle) = runCatching {

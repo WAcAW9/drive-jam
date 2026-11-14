@@ -20,6 +20,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:screenOrientation="unspecified">
             <!-- AAOS: allowed on screen while driving (UI is a static now-playing view) -->
             <meta-data

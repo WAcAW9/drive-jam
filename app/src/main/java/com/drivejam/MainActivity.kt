@@ -44,13 +44,34 @@ class MainActivity : Activity() {
     private val chipOff = Color.parseColor("#2A2F3A")
     private val bg = Color.parseColor("#12151C")
 
+    private var demo: DemoView? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val demoMode = isDebuggable() && intent.getBooleanExtra("demo", false)
+        if (demoMode) {
+            intent.getStringExtra("company")?.let { n -> Company.entries.find { it.name == n }?.let { company = it } }
+            intent.getStringExtra("feeling")?.let { n -> Feeling.entries.find { it.name == n }?.let { feeling = it } }
+            fastTrajectory = true
+            engine.recordTo = java.io.File(filesDir, "jam.wav")
+            demo = DemoView(this, drive, engine)
+        }
         setContentView(buildUi())
         hub = SignalHub(this, drive)
         hub.start()
         ui.post(ticker)
+        if (demoMode && intent.getBooleanExtra("autoplay", false)) ui.postDelayed({ startPlayback() }, 1500)
     }
+
+    /** Demo script hooks: `--ez play true` starts, `--ez stop true` ends playback cleanly (finalizes the WAV). */
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        if (!isDebuggable()) return
+        if (intent.getBooleanExtra("play", false) && !engine.isPlaying) startPlayback()
+        if (intent.getBooleanExtra("stop", false)) stopPlayback()
+    }
+
+    private fun isDebuggable() = (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
     override fun onDestroy() {
         ui.removeCallbacks(ticker)
@@ -71,11 +92,16 @@ class MainActivity : Activity() {
                 target = MoodConductor.target(company, situation()) // rain/night/mode can change mid-drive
                 val p = MoodConductor.params(m, drive.speedKmh)
                 engine.params = p
+                demo?.let { it.mood = m; it.target = target; it.params = p }
                 line = String.format(
                     Locale.US, "♪ %d BPM · %s · 레이어 %d%s\n무드 (%.2f, %.2f) → 목표 (%.2f, %.2f)",
                     p.bpm, p.scale.label, p.layers, if (p.muffled) " · 고속 먹먹" else "",
                     m.v, m.a, target.v, target.a,
                 )
+            }
+            if (!engine.isPlaying) demo?.let { // preview the planned journey before the jam starts
+                val s = situation()
+                it.mood = MoodConductor.start(feeling, s); it.target = MoodConductor.target(company, s)
             }
             nowText.text = line
             signalText.text = signalSummary(now)
@@ -172,6 +198,7 @@ class MainActivity : Activity() {
         }
         root.addView(text("드라이브 잼", 34f, Color.WHITE, bold = true))
         root.addView(text("누구와, 어디로, 어떤 기분으로 — 차가 이 드라이브의 음악을 만듭니다", 16f, Color.parseColor("#9AA4B2")))
+        demo?.let { root.addView(it, LinearLayout.LayoutParams(-1, dp(760)).apply { topMargin = dp(12) }) }
 
         root.addView(label("누구와"))
         root.addView(chipRow(Company.entries.map { it.label }, companyChips) { i ->

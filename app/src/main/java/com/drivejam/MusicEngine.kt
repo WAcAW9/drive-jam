@@ -8,7 +8,6 @@ import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.sin
-import kotlin.math.tanh
 
 /** Chord progressions (semitones from A3). One chord per bar. */
 enum class Scale(val label: String, val chords: Array<IntArray>) {
@@ -27,6 +26,12 @@ class MusicEngine(private val drive: DriveState) {
     @Volatile private var running = false
     private var thread: Thread? = null
 
+    /** Demo only: also write the rendered audio to this WAV file. */
+    @Volatile var recordTo: java.io.File? = null
+    /** Current sequencer step (0-15), for the demo visualizer. */
+    @Volatile var stepNow = 0
+        private set
+
     val isPlaying get() = running
 
     fun start() {
@@ -37,19 +42,31 @@ class MusicEngine(private val drive: DriveState) {
 
     fun stop() {
         running = false
-        thread?.join(500)
+        thread?.join(1500)
         thread = null
     }
 
     // ---------------- audio thread only ----------------
     private val sr = 44100
     private val dt = 1f / sr
-    private val rnd = java.util.Random(7)
     private var cur = MusicParams()
     private var samplesPerStep = 1
     private var sampleInStep = 0
     private var step = -1
     private var chord = -1
+
+    // Per-sample decay factors (multiplying beats calling exp() every sample on a slow emulator CPU).
+    private val kickFreqK = exp(-28f / 44100f); private val kickAmpK = exp(-7f / 44100f)
+    private val snK = exp(-18f / 44100f); private val bassK = exp(-4f / 44100f); private val dropK = exp(-60f / 44100f)
+    private var kickF = 0f; private var kickA = 0f; private var snA = 0f; private var hatA = 0f; private var hatK = 1f
+    private var bassA = 0f; private var dropA = 0f
+    private var seed = 0x2545F491
+    /** xorshift white noise in [-1, 1]; java.util.Random is too slow per sample. */
+    private fun noise(): Float {
+        seed = seed xor (seed shl 13); seed = seed xor (seed ushr 17); seed = seed xor (seed shl 5)
+        return seed * 4.656613e-10f
+    }
+    private fun softClip(x: Float) = if (x > 3f) 1f else if (x < -3f) -1f else x * (27f + x * x) / (27f + 9f * x * x)
 
     private var kickT = 9f; private var kickPh = 0.0
     private var snT = 9f
@@ -84,13 +101,30 @@ class MusicEngine(private val drive: DriveState) {
             .build()
         val n = 512
         val buf = ShortArray(n * 2)
+        val bytes = java.nio.ByteBuffer.allocate(n * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        val wav = recordTo?.let { f -> java.io.RandomAccessFile(f, "rw").apply { setLength(0); write(ByteArray(44)) } }
         padLevel = 0f
         track.play()
+        if (wav != null) android.util.Log.i("DriveJam", "wav start ${System.currentTimeMillis()}")
         while (running) {
             render(buf, n)
             track.write(buf, 0, buf.size)
+            if (wav != null) {
+                bytes.clear(); bytes.asShortBuffer().put(buf); wav.write(bytes.array())
+            }
         }
         track.pause(); track.flush(); track.release()
+        if (wav != null) android.util.Log.i("DriveJam", "wav end ${System.currentTimeMillis()}")
+        wav?.run { writeWavHeader(this); close() }
+    }
+
+    private fun writeWavHeader(f: java.io.RandomAccessFile) {
+        val data = (f.length() - 44).toInt()
+        val h = java.nio.ByteBuffer.allocate(44).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        h.put("RIFF".toByteArray()).putInt(36 + data).put("WAVE".toByteArray())
+        h.put("fmt ".toByteArray()).putInt(16).putShort(1).putShort(2).putInt(sr).putInt(sr * 4).putShort(4).putShort(16)
+        h.put("data".toByteArray()).putInt(data)
+        f.seek(0); f.write(h.array())
     }
 
     private fun setChord() {
@@ -106,11 +140,12 @@ class MusicEngine(private val drive: DriveState) {
     }
 
     private fun trigHat(amp: Float, pan: Float, decay: Float) {
-        hatT = 0f; hatAmp = amp; hatPan = pan; hatDecay = decay
+        hatT = 0f; hatAmp = amp; hatPan = pan; hatDecay = decay; hatA = 1f; hatK = exp(-decay / sr)
     }
 
     private fun onStep(scratching: Boolean) {
         step = (step + 1) % 16
+        stepNow = step
         if (step == 0) { // bar boundary: apply mood-level changes here only
             cur = params
             chord = (chord + 1) % 4
@@ -119,12 +154,12 @@ class MusicEngine(private val drive: DriveState) {
         }
         if (scratching) return
         val l = cur.layers
-        if (l >= 2 && (step == 0 || step == 8 || (l >= 4 && (step == 4 || step == 12)))) { kickT = 0f; kickPh = 0.0 }
-        if (l >= 3 && (step == 4 || step == 12)) snT = 0f
+        if (l >= 2 && (step == 0 || step == 8 || (l >= 4 && (step == 4 || step == 12)))) { kickT = 0f; kickPh = 0.0; kickF = 1f; kickA = 1f }
+        if (l >= 3 && (step == 4 || step == 12)) { snT = 0f; snA = 1f }
         if ((l >= 4 && step % 4 == 2) || (l >= 5 && step % 2 == 0)) trigHat(0.35f, 0f, 70f)
         val turn = drive.turn
         if (turn != 0) trigHat(if (step % 4 == 0) 0.9f else 0.5f, 0.8f * turn, 45f) // blinker hi-hat, panned to its side
-        if (l >= 2 && bassSteps[step]) bassT = 0f
+        if (l >= 2 && bassSteps[step]) { bassT = 0f; bassA = 1f }
     }
 
     private fun render(out: ShortArray, n: Int) {
@@ -147,28 +182,29 @@ class MusicEngine(private val drive: DriveState) {
 
             var drums = 0f
             if (kickT < 0.5f) {
-                kickPh += (45f + 110f * exp(-kickT * 28f)) * dt
-                drums += sin(2 * PI * kickPh).toFloat() * exp(-kickT * 7f) * 0.9f
-                kickT += dt
+                kickPh += (45f + 110f * kickF) * dt
+                drums += sin(2 * PI * kickPh).toFloat() * kickA * 0.9f
+                kickF *= kickFreqK; kickA *= kickAmpK; kickT += dt
             }
             if (snT < 0.3f) {
-                drums += (rnd.nextFloat() * 2 - 1) * exp(-snT * 18f) * 0.3f
-                snT += dt
+                drums += noise() * snA * 0.3f
+                snA *= snK; snT += dt
             }
             var hat = 0f
             if (hatT < 0.25f) {
-                val w = rnd.nextFloat() * 2 - 1
+                val w = noise()
                 hatLp += (w - hatLp) * 0.35f
-                hat = (w - hatLp) * hatAmp * exp(-hatT * hatDecay) * 0.5f
-                hatT += dt
+                hat = (w - hatLp) * hatAmp * hatA * 0.5f
+                hatA *= hatK; hatT += dt
             }
             var bass = 0f
             if (bassT < 0.6f) {
                 bassPh += bassHz * pitchMul * dt
-                val saw = (2 * (bassPh % 1.0) - 1).toFloat()
+                if (bassPh >= 1.0) bassPh -= 1.0
+                val saw = (2 * bassPh - 1).toFloat()
                 bassLp += (saw - bassLp) * 0.06f
-                bass = bassLp * exp(-bassT * 4f) * 0.45f
-                bassT += dt
+                bass = bassLp * bassA * 0.45f
+                bassA *= bassK; bassT += dt
             }
             var pad = 0f
             for (k in 0 until 6) {
@@ -183,15 +219,16 @@ class MusicEngine(private val drive: DriveState) {
 
             var rainL = 0f; var rainR = 0f
             if (rain > 0f) {
-                val w = rnd.nextFloat() * 2 - 1
+                val w = noise()
                 rainLp += (w - rainLp) * 0.2f
                 rainL = rainLp * 0.05f * rain; rainR = rainL
-                if (dropT > 0.08f && rnd.nextFloat() < 0.0003f * rain) {
-                    dropT = 0f; dropHz = 1800f + rnd.nextFloat() * 2500f; dropPan = rnd.nextFloat() * 2 - 1
+                if (dropT > 0.08f && noise() > 1f - 0.0006f * rain) {
+                    dropT = 0f; dropA = 1f; dropHz = 3000f + noise() * 1200f; dropPan = noise()
                 }
             }
             if (dropT < 0.08f) {
-                val d = sin(2 * PI * dropHz * dropT).toFloat() * exp(-dropT * 60f) * 0.12f
+                val d = sin(2 * PI * dropHz * dropT).toFloat() * dropA * 0.12f
+                dropA *= dropK
                 rainL += d * (1 - dropPan); rainR += d * (1 + dropPan)
                 dropT += dt
             }
@@ -207,8 +244,8 @@ class MusicEngine(private val drive: DriveState) {
             var l = drums * 0.8f + bass + padOut * (1 - padPan) + hat * (1 - hatPan) + rainL + dL * 0.35f
             var r = drums * 0.8f + bass + padOut * (1 + padPan) + hat * (1 + hatPan) + rainR + dR * 0.35f
             if (scratching && (sampleInStep * 4 / samplesPerStep) % 2 == 1) { l *= 0.25f; r *= 0.25f } // stutter
-            out[2 * i] = (tanh(l * g * 0.9f) * 32000f).toInt().toShort()
-            out[2 * i + 1] = (tanh(r * g * 0.9f) * 32000f).toInt().toShort()
+            out[2 * i] = (softClip(l * g * 0.9f) * 32000f).toInt().toShort()
+            out[2 * i + 1] = (softClip(r * g * 0.9f) * 32000f).toInt().toShort()
         }
     }
 }

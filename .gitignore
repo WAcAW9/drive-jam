@@ -11,3 +11,6 @@ local.properties
 captures/
 *.keystore
 *.jks
+
+# demo recordings
+demo/out/
