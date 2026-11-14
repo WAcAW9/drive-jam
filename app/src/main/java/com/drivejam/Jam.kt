@@ -194,16 +194,16 @@ object Jam {
 
     /** One plain sentence about why the music sounds like this right now. */
     fun hint(now: Long = System.currentTimeMillis()): String = when {
-        drive.scratchUntil > now -> "급정거 — 곡이 잠깐 멈칫했어요"
-        drive.turn != 0 -> "깜빡이에 맞춰 하이햇이 들어와요"
-        kotlin.math.abs(drive.steerDeg) > 60f -> "핸들을 돌린 쪽으로 소리가 움직여요"
-        drive.brake -> "브레이크를 밟는 동안 소리가 머물러요"
-        params.muffled -> "고속 구간이라 소리를 살짝 먹먹하게"
-        drive.rain > 0f -> "비가 와서 빗소리를 깔았어요"
-        understood != null && now - trackStartedAt < 15_000 -> "요청대로 바꿨어요: $understood"
-        drive.night -> "밤이라 조금 차분하게"
-        feeling.mood != null && now - startedAt < 40_000 -> "'${feeling.label}' 기분에 맞춰 천천히 시작했어요"
-        company != Company.SOLO -> "${company.label}과 함께라 ${if (target.a > 0.2f) "들뜬" else "편안한"} 분위기로"
-        else -> "오늘의 드라이브에 맞춰 흐르는 중"
+        drive.scratchUntil > now -> "급정거해서 곡이 잠깐 멈칫했어요"
+        drive.turn != 0 -> "깜빡이를 켜서 하이햇이 들어왔어요"
+        kotlin.math.abs(drive.steerDeg) > 60f -> "핸들을 돌려서 소리가 그쪽으로 움직였어요"
+        drive.brake -> "브레이크를 밟아서 소리를 잠시 붙잡아 뒀어요"
+        params.muffled -> "속도를 높여서 소리를 살짝 먹먹하게 했어요"
+        drive.rain > 0f -> "와이퍼가 움직여서 빗소리를 깔았어요"
+        understood != null && now - trackStartedAt < 15_000 -> "요청하셔서 바꿨어요 · $understood"
+        drive.night -> "전조등을 켜서 조금 차분하게 바꿨어요"
+        feeling.mood != null && now - startedAt < 40_000 -> "'${feeling.label}' 기분이라서 천천히 시작했어요"
+        company != Company.SOLO -> "${company.label}과 함께라서 ${if (target.a > 0.2f) "들뜬" else "편안한"} 분위기로 골랐어요"
+        else -> "지금 운전에 맞춰 연주하고 있어요"
     }
 }

@@ -54,7 +54,6 @@ class MainActivity : Activity() {
     private lateinit var understoodText: TextView
     private lateinit var devBox: LinearLayout
     private lateinit var signalText: TextView
-    private val pills = mutableListOf<TextView>()
     private val companyChips = mutableListOf<TextView>()
     private val feelingChips = mutableListOf<TextView>()
     private var demo: DemoView? = null
@@ -136,8 +135,6 @@ class MainActivity : Activity() {
         contextPill.text = "${Jam.company.label}${if (Jam.company == Company.SOLO) "" else "과"} · ${Jam.feeling.label}  ▾"
         hintText.text = if (Jam.isPlaying) Jam.hint(now) else if (t == null) "" else "일시정지됨"
         hintRow.visibility = if (hintText.text.isEmpty()) View.INVISIBLE else View.VISIBLE
-        val active = listOf(drive.turn != 0, kotlin.math.abs(drive.steerDeg) > 15f, drive.brake, drive.rain > 0f, drive.night)
-        pills.forEachIndexed { i, p -> paint(p, active[i]) }
         val parked = Jam.parked
         suggestions.visibility = if (parked) View.VISIBLE else View.INVISIBLE
         input.visibility = if (parked) View.VISIBLE else View.GONE
@@ -205,7 +202,7 @@ class MainActivity : Activity() {
             elevation = dp(40).toFloat()
             visibility = View.GONE
         }
-        root.addView(cover, LinearLayout.LayoutParams(dp(400), dp(400)).apply { topMargin = dp(24) })
+        root.addView(cover, LinearLayout.LayoutParams(dp(440), dp(440)).apply { topMargin = dp(24) })
 
         titleText = text("오늘의 드라이브", 54f, Color.WHITE, bold = true).apply { gravity = Gravity.CENTER; letterSpacing = -0.02f }
         root.addView(titleText, lp(-1, -2, top = 26))
@@ -226,14 +223,6 @@ class MainActivity : Activity() {
         controls.addView(playBtn, LinearLayout.LayoutParams(dp(128), dp(128)).apply { leftMargin = dp(44); rightMargin = dp(44) })
         controls.addView(transport(TransportIcon.Kind.NEXT, 84) { Jam.next() })
         root.addView(controls, lp(-2, -2, top = 24))
-
-        val pillRow = row()
-        listOf("깜빡이", "핸들", "브레이크", "와이퍼", "전조등").forEachIndexed { i, name ->
-            val p = text(name, 16f, Color.WHITE).apply { setPadding(dp(18), dp(9), dp(18), dp(9)) }
-            pills += p
-            pillRow.addView(p, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) leftMargin = dp(14) })
-        }
-        root.addView(pillRow, lp(-2, -2, top = 24))
 
         root.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f)) // pushes the request bar to the bottom
 
