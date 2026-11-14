@@ -6,6 +6,7 @@ takes the app's own audio (WAV written by the debug build), then muxes video + a
 Prereqs: Pleos emulator running, debug APK installed, `adb forward tcp:8088 tcp:8088`, ffmpeg on PATH.
 Usage:   python demo/demo.py            (writes demo/out/drive-jam-demo.mp4)
 """
+import base64
 import os
 import subprocess
 import threading
@@ -20,24 +21,27 @@ ACT = f"{PKG}/com.drivejam.MainActivity"
 OUT = Path(__file__).parent / "out"
 FONT = "C\\:/Windows/Fonts/malgunbd.ttf"  # escaped for ffmpeg drawtext
 TASKBAR_ICON = (1482, 1370)  # Drive Jam icon in the Pleos taskbar (2560x1440)
-DURATION = 86
+DURATION = 100
 
 # (start, end, caption) — seconds from recording start
 CAPTIONS = [
-    (0, 6, "출발 전 · 누구와 '친구들', 기분 '피곤해' — 동해 바다로"),
-    (6, 14, "잼 시작 · 피곤한 기분에 맞춰 느리게 시작해서, 친구들과의 들뜬 분위기로 천천히 이동"),
-    (14, 24, "기어 D · 출발 — 차속(주행거리 변화로 계산)에 따라 템포가 움직입니다"),
-    (24, 33, "차선 변경 · 깜빡이 = 하이햇, 핸들 = 필터와 소리 방향"),
-    (33, 44, "비가 온다 · 와이퍼 Low → High = 빗소리가 촘촘해집니다"),
-    (44, 52, "터널 진입 · 전조등 ON = 밤 → 에너지를 살짝 낮춥니다"),
-    (52, 60, "고속도로 100 km/h · 템포에는 상한, 소리는 먹먹하게 — 과속은 보상하지 않습니다"),
-    (60, 67, "앞차 급정거 · 브레이크 + 차속 급감 → 곡이 '멈칫'했다가 바로 이어집니다"),
-    (67, 78, "도착 · 감속하고 기어 P — 곡이 내려앉고 잼이 끝납니다"),
-    (78, 86, "드라이브 잼 — 누구와, 어디로, 어떤 기분으로. 차가 이 드라이브의 음악을 만듭니다"),
+    (0, 6, "출발 전 · 누구와 '친구들', 기분 '피곤해'"),
+    (6, 12, "잼 시작 · 차가 지금 이 드라이브에 맞는 곡을 고릅니다"),
+    (12, 20, "말하듯 요청 · '여름 바다 시티팝으로' → 장르가 완전히 바뀝니다"),
+    (20, 30, "출발 · 차속(주행거리 변화로 계산)에 따라 템포가 움직입니다"),
+    (30, 39, "차선 변경 · 깜빡이 = 하이햇, 핸들 = 필터와 소리 방향"),
+    (39, 49, "비가 온다 · 와이퍼 Low → High = 빗소리가 촘촘해집니다"),
+    (49, 58, "마음에 안 들면 ⏭ · 다른 장르의 새 곡으로 (스티어링 휠 버튼도 됩니다)"),
+    (58, 64, "터널 진입 · 전조등 ON = 밤 → 조금 차분하게"),
+    (64, 72, "고속도로 100 km/h · 템포에는 상한, 소리는 먹먹하게"),
+    (72, 78, "앞차 급정거 · 브레이크 + 차속 급감 → 곡이 '멈칫'했다가 이어집니다"),
+    (78, 86, "주행 중에는 버튼 하나로 · '더 차분하게'"),
+    (86, 94, "도착 · 감속하고 기어 P — 잼이 끝납니다"),
+    (94, 100, "드라이브 잼 — 무슨 노래 틀지? 이제 차가 정합니다"),
 ]
 
 # speed keyframes (t, km/h); linear in between
-SPEED = [(0, 0), (14, 0), (22, 50), (50, 50), (56, 100), (60, 100), (61.5, 40), (66, 60), (67, 60), (73, 0), (86, 0)]
+SPEED = [(0, 0), (20, 0), (28, 50), (64, 50), (70, 100), (72, 100), (73.5, 40), (77, 55), (86, 55), (92, 0), (100, 0)]
 
 
 def odometer_now():
@@ -109,21 +113,24 @@ def main():
     # 3) timeline
     acts = [
         (6, "PLAY"),
-        (14, "/vehicle/gear?gear=Drive"),
-        (24, "/vehicle/turn-signal?mode=BlinkLeft"),
-        (30, "/vehicle/turn-signal?mode=Off"),
-        (33, "/vehicle/body?front_wiper=Low"),
-        (38, "/vehicle/body?front_wiper=High"),
-        (44, "/vehicle/body?front_wiper=Off"),
-        (44.5, "/vehicle/lights?feature=headlamp_mode&value=LowBeam"),
-        (60, "/vehicle/controls?brake=85"),
-        (63, "/vehicle/controls?brake=0"),
-        (70, "/vehicle/controls?brake=30"),
-        (73.5, "/vehicle/gear?gear=Park"),
-        (74, "/vehicle/controls?brake=0"),
-        (76, "/vehicle/lights?feature=headlamp_mode&value=Off"),
-        (77, "STOP"),
-    ] + steering_ramp(24.5, 140, 2.0, 2.0, 2.0)
+        (12, "REQ:여름 바다 시티팝으로"),
+        (20, "/vehicle/gear?gear=Drive"),
+        (30, "/vehicle/turn-signal?mode=BlinkLeft"),
+        (36, "/vehicle/turn-signal?mode=Off"),
+        (39, "/vehicle/body?front_wiper=Low"),
+        (43, "/vehicle/body?front_wiper=High"),
+        (48, "/vehicle/body?front_wiper=Off"),
+        (50, "NEXT"),
+        (58, "/vehicle/lights?feature=headlamp_mode&value=LowBeam"),
+        (72, "/vehicle/controls?brake=85"),
+        (75, "/vehicle/controls?brake=0"),
+        (79, "REQ:더 차분하게"),
+        (89, "/vehicle/controls?brake=30"),
+        (92.5, "/vehicle/gear?gear=Park"),
+        (93, "/vehicle/controls?brake=0"),
+        (94, "STOP"),
+        (95, "/vehicle/lights?feature=headlamp_mode&value=Off"),
+    ] + steering_ramp(30.5, 140, 2.0, 2.0, 2.0)
     acts.sort(key=lambda a: a[0])
 
     adb("logcat", "-c")
@@ -159,6 +166,11 @@ def main():
         if action == "PLAY":
             command("play")
             play_at = time.time() - t0
+        elif action == "NEXT":
+            command("next")
+        elif action.startswith("REQ:"):
+            b64 = base64.b64encode(action[4:].encode("utf-8")).decode()
+            adb("shell", "am", "start", "-f", "0x30000000", "-n", ACT, "--es", "request_b64", b64)
         elif action == "STOP":
             command("stop")
             stop_at = time.time() - t0

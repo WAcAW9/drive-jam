@@ -60,7 +60,8 @@ object MoodConductor {
 
     fun start(feeling: Feeling, s: Situation): Mood = clampMatch(feeling.mood ?: prior(s))
 
-    fun target(company: Company, s: Situation): Mood {
+    /** [request] is the listener's "더 신나게 / 더 차분하게" nudge; it still ends inside the safety envelope. */
+    fun target(company: Company, s: Situation, request: Mood = Mood(0f, 0f)): Mood {
         var t = company.target ?: when {
             morning(s) -> Mood(0.4f, 0.3f)   // wake up
             evening(s) -> Mood(0.5f, -0.1f)  // unwind
@@ -68,7 +69,7 @@ object MoodConductor {
         }
         if (s.night) t = t.copy(a = t.a - 0.1f)
         t = t.copy(a = t.a + 0.1f * s.driveMode)
-        return clampSafe(t)
+        return clampSafe(Mood(t.v + request.v, t.a + request.a))
     }
 
     /** Iso-principle trajectory: smoothstep from start to target over durationSec. */
@@ -78,11 +79,12 @@ object MoodConductor {
         return clampSafe(Mood(start.v + (target.v - start.v) * e, start.a + (target.a - start.a) * e))
     }
 
-    fun params(m: Mood, speedKmh: Float): MusicParams {
+    /** [baseBpm] comes from the playing style (lo-fi 82 … house 122); mood and speed move around it. */
+    fun params(m: Mood, speedKmh: Float, baseBpm: Int = 100): MusicParams {
         val highway = speedKmh > 110f
         // Speed nudges tempo by at most ±8 BPM and stops rewarding past 100 km/h.
         val speedMod = (speedKmh.coerceIn(0f, 100f) / 100f) * 16f - 8f
-        val bpm = (100f + m.a * 12f + speedMod).toInt().coerceIn(70, BPM_CAP)
+        val bpm = (baseBpm + m.a * 12f + speedMod).toInt().coerceIn(66, BPM_CAP)
         val layers = when {
             m.a < -0.3f -> 2
             m.a < 0f -> 3
