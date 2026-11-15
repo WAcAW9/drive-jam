@@ -17,6 +17,8 @@ object Daylight {
  * Clears once speed picks up past 35 km/h ("길이 뚫렸다").
  */
 class TrafficDetector {
+    /** How long stop-and-go must last. The demo shortens it (decisions.md #24). */
+    var window = 30_000L
     var active = false; private set
     var clearedAt = 0L; private set
     private var lastBrake = false
@@ -27,9 +29,9 @@ class TrafficDetector {
         if (brake && !lastBrake) presses.addLast(now)
         lastBrake = brake
         speeds.addLast(now to speedKmh)
-        while (presses.isNotEmpty() && now - presses.first() > WINDOW) presses.removeFirst()
-        while (now - speeds.first().first > WINDOW) speeds.removeFirst()
-        val filled = now - speeds.first().first >= WINDOW * 8 / 10
+        while (presses.isNotEmpty() && now - presses.first() > window) presses.removeFirst()
+        while (now - speeds.first().first > window) speeds.removeFirst()
+        val filled = now - speeds.first().first >= window * 8 / 10
         if (!active && driving && filled && presses.size >= 3 && speeds.sumOf { it.second.toDouble() } / speeds.size < 20.0) {
             active = true
         } else if (active && (!driving || speedKmh > 35f)) {
@@ -38,8 +40,6 @@ class TrafficDetector {
         }
         return active
     }
-
-    companion object { const val WINDOW = 30_000L }
 }
 
 /** Collectible moments. Nothing here can be earned by speed, hard acceleration or hard braking (decisions.md #25). */

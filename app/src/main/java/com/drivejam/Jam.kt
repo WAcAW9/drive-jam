@@ -203,6 +203,7 @@ object Jam {
             drive.tunnel = drive.lowBeam && Daylight.isDay(month, hour)
             drive.night = drive.lowBeam && !drive.tunnel
             sunset = Daylight.isSunset(month, hour)
+            trafficDetector.window = if (fastTrajectory) 12_000L else 30_000L // demo: 12 s instead of 30 s
             trafficDetector.update(now, drive.speedKmh, drive.brake, drive.gear == "D")
             trackTrip(now)
             val s = situation()

@@ -21,7 +21,7 @@ ACT = f"{PKG}/com.drivejam.MainActivity"
 OUT = Path(__file__).parent / "out"
 FONT = "C\\:/Windows/Fonts/malgunbd.ttf"  # escaped for ffmpeg drawtext
 TASKBAR_ICON = (1482, 1370)  # Drive Jam icon in the Pleos taskbar (2560x1440)
-DURATION = 100
+DURATION = 126
 # Show only the Drive Jam panel (the console's own driving sim drives the cluster speedometer, which would
 # disagree with the scripted speed); 1920x1080 recording -> app panel -> padded 1080p.
 CROP = "crop=1260:906:640:68,scale=-2:940,pad=1920:1080:(ow-iw)/2:0:color=0x14121F"  # captions go in the 140px strip
@@ -34,17 +34,20 @@ CAPTIONS = [
     (20, 30, "출발 · 차속(주행거리 변화로 계산)에 따라 템포가 움직입니다"),
     (30, 39, "차선 변경 · 깜빡이 = 하이햇, 핸들 = 필터와 소리 방향"),
     (39, 49, "비가 온다 · 와이퍼 Low → High = 빗소리가 촘촘해집니다"),
-    (49, 58, "마음에 안 들면 '다음 곡' · 다른 장르의 새 곡으로 (스티어링 휠 버튼도 됩니다)"),
-    (58, 64, "터널 진입 · 전조등 ON = 밤 → 조금 차분하게"),
-    (64, 72, "고속도로 100 km/h · 템포에는 상한, 소리는 먹먹하게"),
-    (72, 78, "앞차 급정거 · 브레이크 + 차속 급감 → 곡이 '멈칫'했다가 이어집니다"),
-    (78, 86, "주행 중에는 버튼 하나로 · '더 차분하게'"),
-    (86, 94, "도착 · 감속하고 기어 P — 잼이 끝납니다"),
-    (94, 100, "드라이브 잼 — 내 운전이 그대로 음악이 됩니다"),
+    (49, 57, "마음에 안 들면 '다음 곡' · 다른 장르의 새 곡으로 (스티어링 휠 버튼도 됩니다)"),
+    (57, 65, "터널 · 낮에 전조등이 켜지면 터널로 보고 잔향을 늘립니다"),
+    (65, 76, "해 질 녘 · 노을 무렵엔 브라스가 부풀어 오릅니다 (시각은 연출)"),
+    (76, 81, "앞차 급정거 · 브레이크 + 차속 급감 → 곡이 '멈칫'했다가 이어집니다"),
+    (81, 97, "정체 · 막히는 길에선 드럼을 빼고 잔잔하게 (판정 시간은 시연용으로 단축)"),
+    (97, 104, "길이 뚫리면 · 리듬이 다시 들어옵니다"),
+    (104, 111, "도착 · 감속하고 기어 P"),
+    (111, 121, "주차하면 오늘의 드라이브가 한 곡으로 · 드라이버 카드와 도감 스탬프"),
+    (121, 126, "드라이브 잼 — 내 운전이 그대로 음악이 됩니다"),
 ]
 
 # speed keyframes (t, km/h); linear in between
-SPEED = [(0, 0), (20, 0), (28, 50), (64, 50), (70, 100), (72, 100), (73.5, 40), (77, 55), (86, 55), (92, 0), (100, 0)]
+SPEED = [(0, 0), (20, 0), (28, 60), (70, 60), (75, 90), (76, 90), (77.5, 40), (80, 10), (84, 6), (88, 12), (92, 6),
+         (96, 8), (99, 50), (104, 50), (110, 0), (126, 0)]
 
 
 def odometer_now():
@@ -84,9 +87,9 @@ def intent(*extras):
         "-f", "0x10200000", "-n", ACT, *extras)
 
 
-def command(extra):
-    """Deliver a play/stop command to the running activity (singleTop -> onNewIntent)."""
-    adb("shell", "am", "start", "-f", "0x30000000", "-n", ACT, "--ez", extra, "true")
+def command(extra, *more):
+    """Deliver a command to the running activity (singleTop -> onNewIntent)."""
+    adb("shell", "am", "start", "-f", "0x30000000", "-n", ACT, "--ez", extra, "true", *more)
 
 
 def bring_app_to_front():
@@ -112,10 +115,13 @@ def main():
 
     # 2) fresh app in demo mode
     adb("shell", "am", "force-stop", PKG)
+    user = adb("shell", "am", "get-current-user").stdout.strip() or "0"
+    adb("shell", "run-as", PKG, "--user", user, "rm", "-f", "shared_prefs/jam_stamps.xml")  # fresh stamp collection
     intent("--ez", "demo", "true", "--es", "company", "FRIENDS", "--es", "feeling", "TIRED")
     time.sleep(4)
     adb("shell", "input", "keyevent", "111")  # ESC: close any system popup (e.g. the profile menu)
     bring_app_to_front()
+    command("noop", "--ef", "hour", "14.0")  # an afternoon drive; the sunset scene moves the clock later
     time.sleep(1)
 
     # 3) timeline
@@ -129,15 +135,19 @@ def main():
         (43, "/vehicle/body?front_wiper=High"),
         (48, "/vehicle/body?front_wiper=Off"),
         (50, "NEXT"),
-        (58, "/vehicle/lights?feature=headlamp_mode&value=LowBeam"),
-        (72, "/vehicle/controls?brake=85"),
-        (75, "/vehicle/controls?brake=0"),
-        (79, "REQ:더 차분하게"),
-        (89, "/vehicle/controls?brake=30"),
-        (92.5, "/vehicle/gear?gear=Park"),
-        (93, "/vehicle/controls?brake=0"),
-        (94, "STOP"),
-        (95, "/vehicle/lights?feature=headlamp_mode&value=Off"),
+        (57, "/vehicle/lights?feature=headlamp_mode&value=LowBeam"),  # daytime + low beam = tunnel
+        (63.5, "/vehicle/lights?feature=headlamp_mode&value=Off"),
+        (65, "HOUR:17.0"),  # Nov sunset ~17:24 -> the sunset window
+        (76, "/vehicle/controls?brake=85"),
+        (78, "/vehicle/controls?brake=0"),
+        (82, "/vehicle/controls?brake=40"), (83, "/vehicle/controls?brake=0"),  # stop-and-go
+        (86, "/vehicle/controls?brake=40"), (87, "/vehicle/controls?brake=0"),
+        (90, "/vehicle/controls?brake=40"), (91, "/vehicle/controls?brake=0"),
+        (93.5, "/vehicle/controls?brake=40"), (94.5, "/vehicle/controls?brake=0"),
+        (108, "/vehicle/controls?brake=30"),
+        (111, "/vehicle/gear?gear=Park"),
+        (111.5, "/vehicle/controls?brake=0"),
+        (121, "STOP"),
     ] + steering_ramp(30.5, 140, 2.0, 2.0, 2.0)
     acts.sort(key=lambda a: a[0])
 
@@ -179,6 +189,8 @@ def main():
         elif action.startswith("REQ:"):
             b64 = base64.b64encode(action[4:].encode("utf-8")).decode()
             adb("shell", "am", "start", "-f", "0x30000000", "-n", ACT, "--es", "request_b64", b64)
+        elif action.startswith("HOUR:"):
+            command("noop", "--ef", "hour", action[5:])
         elif action == "STOP":
             command("stop")
             stop_at = time.time() - t0
@@ -195,7 +207,6 @@ def main():
     # 4) collect
     video, wav, final = OUT / "screen.mp4", OUT / "jam.wav", OUT / "drive-jam-demo.mp4"
     adb("pull", "/sdcard/drivejam_demo.mp4", str(video), check=True)
-    user = adb("shell", "am", "get-current-user").stdout.strip() or "0"
     with open(wav, "wb") as f:  # internal storage of a debuggable app: readable through run-as
         subprocess.run([ADB, "exec-out", "run-as", PKG, "--user", user, "cat", "files/jam.wav"], stdout=f, check=True)
     if wav.stat().st_size < 1000:
