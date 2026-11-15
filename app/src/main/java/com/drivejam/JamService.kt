@@ -79,7 +79,7 @@ class JamService : MediaBrowserService() {
 
     override fun onLoadChildren(parentId: String, result: Result<MutableList<MediaBrowser.MediaItem>>) {
         val item = MediaBrowser.MediaItem(
-            MediaDescription.Builder().setMediaId("jam").setTitle("지금 이 드라이브").setSubtitle("드라이브 잼").build(),
+            MediaDescription.Builder().setMediaId("jam").setTitle("지금 이 드라이브").setSubtitle("Drive JAM").build(),
             MediaBrowser.MediaItem.FLAG_PLAYABLE,
         )
         result.sendResult(mutableListOf(item))

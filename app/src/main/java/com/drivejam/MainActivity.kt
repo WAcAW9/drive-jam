@@ -143,7 +143,7 @@ class MainActivity : Activity() {
             artistText.text = "출발 전에 누구와, 어떤 기분인지 골라 주세요"
         } else {
             val sec = ((now - Jam.trackStartedAt) / 1000).toInt()
-            artistText.text = String.format(Locale.US, "드라이브 잼 · %s · %d:%02d", t.style.label, sec / 60, sec % 60)
+            artistText.text = String.format(Locale.US, "Drive JAM · %s · %d:%02d", t.style.label, sec / 60, sec % 60)
         }
         playBtn.kind = if (Jam.isPlaying) TransportIcon.Kind.PAUSE else TransportIcon.Kind.PLAY
         contextPill.text = "${Jam.company.label}${if (Jam.company == Company.SOLO) "" else "과"} · ${Jam.feeling.label}  ▾"
@@ -181,7 +181,7 @@ class MainActivity : Activity() {
 
         // header
         val header = row().apply { gravity = Gravity.CENTER_VERTICAL }
-        header.addView(text("드라이브 잼", 20f, dim, bold = true).apply {
+        header.addView(text("Drive JAM", 20f, dim, bold = true).apply {
             setOnLongClickListener { devBox.visibility = if (devBox.visibility == View.VISIBLE) View.GONE else View.VISIBLE; true }
         }, LinearLayout.LayoutParams(0, -2, 1f))
         contextPill = text("", 17f, Color.WHITE).apply {

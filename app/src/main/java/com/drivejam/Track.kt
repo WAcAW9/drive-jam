@@ -89,7 +89,7 @@ enum class Style(
 /** One "song": a style in a key with a seeded variation. Same track = same music (reproducible for ⏮). */
 data class Track(val style: Style, val key: Int, val seed: Int) {
     val title get() = style.titles[Math.floorMod(seed, style.titles.size)]
-    val artist get() = "드라이브 잼 · ${style.label}"
+    val artist get() = "Drive JAM · ${style.label}"
     val variant get() = Math.floorMod(seed ushr 4, 3) // chord progression from the scale's pool
 }
 
