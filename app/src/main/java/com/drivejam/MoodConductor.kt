@@ -35,6 +35,9 @@ data class MusicParams(
     val brightness: Float = 0.5f,
     val scale: Scale = Scale.DORIAN,
     val muffled: Boolean = false,
+    val sunset: Boolean = false,  // brass swell
+    val tunnel: Boolean = false,  // longer echo
+    val traffic: Boolean = false, // thinner, softer, slower
 )
 
 object MoodConductor {
@@ -98,6 +101,13 @@ object MoodConductor {
             else -> Scale.DORIAN
         }
         return MusicParams(bpm, layers, bright, scale, muffled = highway)
+    }
+
+    /** What's outside the window, layered on top of the mood. Traffic drops to kick + bass under the keys: ambient, not tense. */
+    fun scene(p: MusicParams, sunset: Boolean, tunnel: Boolean, traffic: Boolean): MusicParams {
+        var q = p.copy(sunset = sunset && !tunnel, tunnel = tunnel, traffic = traffic)
+        if (traffic) q = q.copy(layers = minOf(q.layers, 2), brightness = q.brightness * 0.7f, bpm = (q.bpm - 6).coerceAtLeast(66))
+        return q
     }
 
     fun distance(a: Mood, b: Mood) = abs(a.v - b.v) + abs(a.a - b.a)

@@ -40,6 +40,8 @@ class MainActivity : Activity() {
     private lateinit var scroller: ScrollView
     private lateinit var contextPill: TextView
     private lateinit var setupCard: LinearLayout
+    private lateinit var arrival: LinearLayout
+    private var shownCard: TripCard? = null
     private lateinit var cover: ImageView
     private lateinit var titleText: TextView
     private lateinit var artistText: TextView
@@ -82,7 +84,7 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 
-    /** Demo-script hooks (debug builds only): play / stop / next / prev / request_b64. */
+    /** Demo-script hooks (debug builds only): play / stop / next / prev / request_b64, plus hour / gear / speed / lowbeam / brake fakes. */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (!isDebuggable()) return
@@ -91,6 +93,11 @@ class MainActivity : Activity() {
         if (intent.getBooleanExtra("next", false)) Jam.next()
         if (intent.getBooleanExtra("prev", false)) Jam.previous()
         intent.getStringExtra("request_b64")?.let { submit(String(Base64.decode(it, Base64.DEFAULT), Charsets.UTF_8)) }
+        if (intent.hasExtra("hour")) Jam.clockOverride = intent.getFloatExtra("hour", -1f).takeIf { it >= 0f }
+        intent.getStringExtra("gear")?.let { drive.gear = it }
+        if (intent.hasExtra("speed")) { drive.speedFromDev = true; drive.speedKmh = intent.getFloatExtra("speed", 0f) }
+        if (intent.hasExtra("lowbeam")) drive.lowBeam = intent.getBooleanExtra("lowbeam", false)
+        if (intent.hasExtra("brake")) drive.brake = intent.getBooleanExtra("brake", false)
     }
 
     private fun isDebuggable() = (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
@@ -101,10 +108,15 @@ class MainActivity : Activity() {
         Jam.play()
     }
 
-    /** The setup card takes the cover's place, so the controls never get pushed off screen. */
+    /** The setup card and the arrival card take the cover's place, so the controls never get pushed off screen. */
     private fun showSetup(show: Boolean) {
         setupCard.visibility = if (show) View.VISIBLE else View.GONE
-        cover.visibility = if (show) View.GONE else View.VISIBLE
+        layoutCenter()
+    }
+
+    private fun layoutCenter() {
+        arrival.visibility = if (Jam.lastCard != null && setupCard.visibility != View.VISIBLE) View.VISIBLE else View.GONE
+        cover.visibility = if (setupCard.visibility == View.VISIBLE || arrival.visibility == View.VISIBLE) View.GONE else View.VISIBLE
     }
 
     private fun submit(text: String) {
@@ -124,6 +136,8 @@ class MainActivity : Activity() {
         val now = System.currentTimeMillis()
         val t = Jam.track
         if (t != shownTrack && t != null) showTrack(t)
+        Jam.lastCard.let { if (it != shownCard) { shownCard = it; if (it != null) fillArrival(it) } }
+        layoutCenter()
         if (t == null) {
             titleText.text = "오늘의 드라이브"
             artistText.text = "출발 전에 누구와, 어떤 기분인지 골라 주세요"
@@ -203,6 +217,11 @@ class MainActivity : Activity() {
             visibility = View.GONE
         }
         root.addView(cover, LinearLayout.LayoutParams(dp(440), dp(440)).apply { topMargin = dp(24) })
+        arrival = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
+            background = glass(32); setPadding(dp(40), dp(30), dp(40), dp(30)); visibility = View.GONE
+        }
+        root.addView(arrival, lp(dp(820), -2, top = 24))
 
         titleText = text("오늘의 드라이브", 54f, Color.WHITE, bold = true).apply { gravity = Gravity.CENTER; letterSpacing = -0.02f }
         root.addView(titleText, lp(-1, -2, top = 26))
@@ -272,6 +291,29 @@ class MainActivity : Activity() {
         return scroller
     }
 
+    /** After parking: the drive as a song, a driver card that is always a compliment, and the moments collected. */
+    private fun fillArrival(c: TripCard) {
+        arrival.removeAllViews()
+        arrival.addView(text("오늘의 드라이브가 한 곡이 됐어요", 17f, dim).apply { gravity = Gravity.CENTER })
+        arrival.addView(text(c.title, 38f, Color.WHITE, bold = true).apply { gravity = Gravity.CENTER }, lp(-1, -2, top = 8))
+        arrival.addView(text(c.stats, 19f, dim).apply { gravity = Gravity.CENTER }, lp(-1, -2, top = 4))
+        arrival.addView(text(c.type, 24f, Color.WHITE, bold = true).apply { gravity = Gravity.CENTER }, lp(-1, -2, top = 26))
+        arrival.addView(text(c.typeLine, 19f, dim).apply { gravity = Gravity.CENTER }, lp(-1, -2, top = 4))
+        if (c.stamps.isNotEmpty()) {
+            c.stamps.chunked(3).forEachIndexed { line, stamps ->
+                val r = row().apply { gravity = Gravity.CENTER_HORIZONTAL }
+                stamps.forEachIndexed { i, s ->
+                    val new = s in c.newStamps
+                    r.addView(chip(if (new) "NEW  ${s.label}" else s.label, if (new) pill(solid) else glass(), if (new) ink else Color.WHITE, bold = new),
+                        LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) leftMargin = dp(10) })
+                }
+                arrival.addView(r, lp(-1, -2, top = if (line == 0) 24 else 10))
+            }
+        }
+        arrival.addView(text("드라이브 도감 ${c.owned} / ${Stamp.entries.size}", 16f, dim).apply { gravity = Gravity.CENTER }, lp(-1, -2, top = 14))
+        arrival.addView(chip("닫기", glass(), Color.WHITE) { Jam.dismissCard() }, lp(-2, -2, top = 20))
+    }
+
     private fun signalSummary(now: Long): String {
         val p = Jam.params
         val fails = Jam.failures.takeIf { it.isNotEmpty() }?.joinToString(", ", "\n미지원·실패: ") ?: ""
@@ -308,7 +350,7 @@ class MainActivity : Activity() {
             }
         })
         r.addView(chip("와이퍼", glass(), Color.WHITE) { drive.rain = when { drive.rain == 0f -> 0.5f; drive.rain < 1f -> 1f; else -> 0f } })
-        r.addView(chip("전조등", glass(), Color.WHITE) { drive.night = !drive.night })
+        r.addView(chip("전조등", glass(), Color.WHITE) { drive.lowBeam = !drive.lowBeam })
         r.addView(chip("궤적 1분", glass(), Color.WHITE) { Jam.fastTrajectory = !Jam.fastTrajectory })
         p.addView(r, lp(-1, -2, top = 8))
         return p

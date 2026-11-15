@@ -11,10 +11,13 @@ import java.nio.ByteOrder
 class EngineRenderTest {
     private val outDir = File("build/demo-audio").apply { mkdirs() }
 
-    private fun renderStyle(style: Style, seconds: Int, drive: DriveState = DriveState()): Pair<ShortArray, Double> {
+    private fun renderStyle(
+        style: Style, seconds: Int, drive: DriveState = DriveState(),
+        params: MusicParams = MusicConductorDefaults.forStyle(style),
+    ): Pair<ShortArray, Double> {
         val e = MusicEngine(drive)
         e.load(Track(style, key = 0, seed = 42))
-        e.params = MusicConductorDefaults.forStyle(style)
+        e.params = params
         val n = 512
         val total = 44100 * seconds
         val out = ShortArray(total * 2)
@@ -53,6 +56,24 @@ class EngineRenderTest {
             assertTrue("$s too slow", realtime > 3) // the emulator is several times slower than a desktop JVM
         }
     }
+
+    @Test
+    fun scenesStayCleanAndAudible() {
+        for ((name, sunset, tunnel, traffic) in listOf(
+            Scene("sunset", true, false, false), Scene("tunnel", false, true, false), Scene("traffic", false, false, true),
+        )) {
+            val p = MoodConductor.scene(MusicConductorDefaults.forStyle(Style.CITY_POP), sunset, tunnel, traffic)
+            val (pcm, _) = renderStyle(Style.CITY_POP, 30, params = p)
+            writeWav(File(outDir, "city_pop_$name.wav"), pcm)
+            val rms = Math.sqrt(pcm.map { it.toDouble() * it }.average()) / 32768
+            val clipped = pcm.count { it >= 31900 || it <= -31900 }.toDouble() / pcm.size
+            println("%-8s rms=%.3f clipped=%.4f".format(name, rms, clipped))
+            assertTrue("$name silent", rms > 0.02)
+            assertTrue("$name overloaded", clipped < 0.01)
+        }
+    }
+
+    private data class Scene(val name: String, val sunset: Boolean, val tunnel: Boolean, val traffic: Boolean)
 
     @Test
     fun songFormAndMelodyResolve() {

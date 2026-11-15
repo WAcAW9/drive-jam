@@ -134,6 +134,9 @@ class MusicEngine(private val drive: DriveState) {
     // melody
     private var leadPh = 0.0; private var leadM = 0.0; private var leadHz = 440.0; private var leadA = 0f; private var leadK = k(3f)
     private var leadLp = 0f; private var leadT = 0f; private var leadI = 0f
+    // sunset brass swell: three detuned saws on the chord, slow attack, filter opening with the envelope
+    private val brPh = DoubleArray(3); private var brT = 9f; private var brA = 0f; private var brLp = 0f; private var brLevel = 0f
+    private val brK = k(1.1f); private var wetNow = 0.3f
     // chords
     private val chordHz = DoubleArray(4); private var chordN = 3; private var arpIdx = 0
     // fx
@@ -244,6 +247,7 @@ class MusicEngine(private val drive: DriveState) {
             bassK = k(when (st.bassSound) { Bass.PLUCK -> if (st == Style.SYNTHWAVE) 14f else 6f; Bass.SUB -> 5f; Bass.ROUND -> 3.5f })
             val sec = Song.section(bar)
             if ((sec == Song.Section.CHORUS || sec == Song.Section.CHORUS2) && Song.section(bar - 1) != sec && cur.layers >= 4) crashA = 1f
+            if (cur.sunset && sec != Song.Section.INTRO) { brT = 0f; brA = 1f }
         }
         val base = sr * 60.0 / cur.bpm / 4
         samplesPerStep = (base * if (step % 2 == 0) 1 + st.swing else 1 - st.swing).toInt().coerceAtLeast(1)
@@ -305,8 +309,10 @@ class MusicEngine(private val drive: DriveState) {
         }
         val targetCut = ((cur.brightness * 0.8f + abs(steer) * 0.5f) * sectionCut * (if (cur.muffled) 0.6f else 1f) *
             (if (xfDir < 0) 0.3f + 0.7f * xf else 1f)).coerceIn(0.05f, 1f)
-        val targetFb = if (drive.brake) 0.62f else 0.15f + st.space * 0.4f // brake = the car "holds its breath"
-        val wet = 0.2f + st.space * 0.35f
+        val tunnel = if (cur.tunnel) 1f else 0f // tunnel = the room gets bigger
+        val targetFb = if (drive.brake) 0.62f else 0.15f + st.space * 0.4f + 0.22f * tunnel // brake = the car "holds its breath"
+        val targetWet = 0.2f + st.space * 0.35f + 0.3f * tunnel
+        val brTarget = if (cur.sunset) 1f else 0f
         val targetPitch = if (scratching) 0.55 else 1.0
         val pan = steer * 0.6f
         val delayLen = (samplesPerStep * 3).coerceIn(1, sr - 1)
@@ -319,6 +325,8 @@ class MusicEngine(private val drive: DriveState) {
             feedback += (targetFb - feedback) * 0.0002f
             pitchMul += (targetPitch - pitchMul) * 0.0004
             if (padLevel < 1f) padLevel += 0.00001f
+            wetNow += (targetWet - wetNow) * 0.0001f
+            brLevel += (brTarget - brLevel) * 0.00002f
             val barLen = samplesPerStep * 16f
             if (xfDir < 0) {
                 xf -= 1f / barLen
@@ -406,6 +414,19 @@ class MusicEngine(private val drive: DriveState) {
                 padLp2 += (padLp1 - padLp2) * coef
                 synth = padLp2 * padLevel * padEnv
             }
+            var brass = 0f
+            if (brLevel > 0.001f && brA > 0.001f) {
+                var p = 0f
+                for (o in 0 until 3) {
+                    brPh[o] += chordHz[o] * (1.0 + 0.003 * (o - 1)) * pitchMul * dt
+                    if (brPh[o] >= 1.0) brPh[o] -= 1.0
+                    p += 2f * brPh[o].toFloat() - 1f
+                }
+                val env = (brT / 0.35f).coerceAtMost(1f) * brA
+                brLp += (p - brLp) * (0.012f + 0.1f * env * (0.4f + cutoff))
+                brass = brLp * env * brLevel * 0.08f
+                brA *= brK; brT += dt
+            }
             var ep = 0f
             for (v in 0 until EPV) {
                 val a = epA[v]
@@ -463,7 +484,7 @@ class MusicEngine(private val drive: DriveState) {
             }
 
             // ---- mix: ping-pong delay as the "space"; its tail rings through track changes ----
-            val tonal = (synth + ep + str) * duck
+            val tonal = (synth + ep + str + brass) * duck
             val melodyOut = lead * duck
             val rp = (dlPos - delayLen + sr) % sr
             val dL = dlL[rp]; val dR = dlR[rp]
@@ -473,8 +494,8 @@ class MusicEngine(private val drive: DriveState) {
             dlPos = (dlPos + 1) % sr
 
             val center = (drums * 0.85f + bass + vinyl + crash) * xf
-            var l = center + (tonal * (1 - pan) + melodyOut * (1 + pan * 0.5f) + hat * (1 - hatPan)) * xf + rainL + dL * wet
-            var r = center + (tonal * (1 + pan) + melodyOut * (1 - pan * 0.5f) + hat * (1 + hatPan)) * xf + rainR + dR * wet
+            var l = center + (tonal * (1 - pan) + melodyOut * (1 + pan * 0.5f) + hat * (1 - hatPan)) * xf + rainL + dL * wetNow
+            var r = center + (tonal * (1 + pan) + melodyOut * (1 - pan * 0.5f) + hat * (1 + hatPan)) * xf + rainR + dR * wetNow
             if (scratching && (sampleInStep * 4 / samplesPerStep) % 2 == 1) { l *= 0.25f; r *= 0.25f } // stutter
             outBuf[2 * i] = (softClip(l * g * 0.85f) * 32000f).toInt().toShort()
             outBuf[2 * i + 1] = (softClip(r * g * 0.85f) * 32000f).toInt().toShort()

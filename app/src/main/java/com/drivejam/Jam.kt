@@ -37,6 +37,21 @@ object Jam {
     private var startedAt = 0L
     private var duration = 480f
     var fastTrajectory = false
+    /** Debug/demo only: pretend it's this local hour (e.g. 17.2 = just before sunset in November). */
+    var clockOverride: Float? = null
+
+    // outside the window
+    var sunset = false; private set
+    private val trafficDetector = TrafficDetector()
+    val traffic get() = trafficDetector.active
+    private var lastTick = 0L
+
+    // the drive itself
+    private var trip: Trip? = null
+    private var lastScratch = 0L
+    private var wasTunnel = false
+    /** Shown on the screen after parking; cleared by the listener or by the next drive. */
+    var lastCard: TripCard? = null; private set
 
     private var focus: AudioFocusRequest? = null
     private val listeners = mutableSetOf<() -> Unit>()
@@ -135,6 +150,7 @@ object Jam {
     }
 
     private fun setTrack(t: Track) {
+        if (t != track) trip?.let { it.songs++ }
         track = t
         trackStartedAt = System.currentTimeMillis()
         if (isPlaying) engine.pendingTrack = t else engine.load(t)
@@ -165,11 +181,13 @@ object Jam {
         start = at(now); startedAt = now; duration = seconds
     }
 
+    private fun hourNow(c: Calendar) = clockOverride ?: (c.get(Calendar.HOUR_OF_DAY) + c.get(Calendar.MINUTE) / 60f)
+
     fun situation(): Situation {
         val c = Calendar.getInstance()
         val dow = c.get(Calendar.DAY_OF_WEEK)
         return Situation(
-            hour = c.get(Calendar.HOUR_OF_DAY),
+            hour = hourNow(c).toInt(),
             weekday = dow != Calendar.SATURDAY && dow != Calendar.SUNDAY,
             rain = drive.rain > 0f, night = drive.night, driveMode = drive.driveMode,
         )
@@ -179,6 +197,14 @@ object Jam {
         override fun run() {
             val now = System.currentTimeMillis()
             hub.tick(now)
+            val c = Calendar.getInstance()
+            val month = c.get(Calendar.MONTH); val hour = hourNow(c)
+            // ponytail: daylight + low beam = tunnel; a driver switching lights on by hand in the day also reads as one
+            drive.tunnel = drive.lowBeam && Daylight.isDay(month, hour)
+            drive.night = drive.lowBeam && !drive.tunnel
+            sunset = Daylight.isSunset(month, hour)
+            trafficDetector.update(now, drive.speedKmh, drive.brake, drive.gear == "D")
+            trackTrip(now)
             val s = situation()
             if (startedAt == 0L) { // preview before the first play
                 mood = MoodConductor.start(feeling, s); target = MoodConductor.target(company, s, request)
@@ -186,21 +212,56 @@ object Jam {
                 target = MoodConductor.target(company, s, request) // rain/night/mode can change mid-drive
                 mood = at(now)
             }
-            params = MoodConductor.params(mood, drive.speedKmh, track?.style?.baseBpm ?: 100)
+            params = MoodConductor.scene(
+                MoodConductor.params(mood, drive.speedKmh, track?.style?.baseBpm ?: 100), sunset, drive.tunnel, traffic,
+            )
             if (isPlaying) engine.params = params
             ui.postDelayed(this, 100)
         }
     }
+
+    private fun trackTrip(now: Long) {
+        val dt = if (lastTick == 0L) 0f else (now - lastTick) / 1000f
+        lastTick = now
+        if (trip == null && drive.gear == "D" && drive.speedKmh > 3f) {
+            trip = Trip(now, company); lastCard = null; lastScratch = drive.scratchUntil
+        }
+        val t = trip ?: return
+        t.km += drive.speedKmh * dt / 3600f
+        if (drive.rain > 0f) t.rain = true
+        if (sunset && !drive.tunnel) t.sunset = true
+        if (drive.night) t.night = true
+        if (traffic) t.traffic = true
+        if (drive.tunnel && !wasTunnel) t.tunnels++
+        wasTunnel = drive.tunnel
+        if (drive.scratchUntil != lastScratch) { lastScratch = drive.scratchUntil; t.hardBrakes++ }
+        if (drive.gear == "P") {
+            trip = null
+            if (now - t.startedAt < 20_000) return // a shunt in the car park is not a drive
+            val owned = stamps.getStringSet("owned", emptySet())!!.mapNotNull { n -> Stamp.entries.find { it.name == n } }.toSet()
+            lastCard = TripCards.card(t, now, owned)
+            stamps.edit().putStringSet("owned", (owned + TripCards.stamps(t)).map { it.name }.toSet()).apply()
+            changed()
+        }
+    }
+
+    private val stamps by lazy { app.getSharedPreferences("jam_stamps", Context.MODE_PRIVATE) }
+
+    fun dismissCard() { lastCard = null; changed() }
 
     /** One plain sentence about why the music sounds like this right now. */
     fun hint(now: Long = System.currentTimeMillis()): String = when {
         drive.scratchUntil > now -> "급정거해서 곡이 잠깐 멈칫했어요"
         drive.turn != 0 -> "깜빡이를 켜서 하이햇이 들어왔어요"
         kotlin.math.abs(drive.steerDeg) > 60f -> "핸들을 돌려서 소리가 그쪽으로 움직였어요"
+        drive.tunnel -> "터널에 들어가서 울림을 늘렸어요"
+        traffic -> "길이 막혀서 잔잔하게 바꿨어요"
+        now - trafficDetector.clearedAt < 12_000 -> "길이 뚫려서 리듬을 다시 넣었어요"
         drive.brake -> "브레이크를 밟아서 소리를 잠시 붙잡아 뒀어요"
         params.muffled -> "속도를 높여서 소리를 살짝 먹먹하게 했어요"
         drive.rain > 0f -> "와이퍼가 움직여서 빗소리를 깔았어요"
         understood != null && now - trackStartedAt < 15_000 -> "요청하셔서 바꿨어요 · $understood"
+        params.sunset -> "해 질 녘이라 브라스를 얹었어요"
         drive.night -> "전조등을 켜서 조금 차분하게 바꿨어요"
         feeling.mood != null && now - startedAt < 40_000 -> "'${feeling.label}' 기분이라서 천천히 시작했어요"
         company != Company.SOLO -> "${company.label}과 함께라서 ${if (target.a > 0.2f) "들뜬" else "편안한"} 분위기로 골랐어요"

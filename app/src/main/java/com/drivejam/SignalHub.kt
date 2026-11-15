@@ -26,7 +26,9 @@ class DriveState {
     @Volatile var steerDeg = 0f       // -540..540
     @Volatile var brake = false
     @Volatile var rain = 0f           // 0 off, 0.5 intermittent/auto, 1 continuous
-    @Volatile var night = false       // low beam on
+    @Volatile var lowBeam = false
+    @Volatile var night = false       // low beam on after dark (set by Jam from the clock)
+    @Volatile var tunnel = false      // low beam switched on in daylight
     @Volatile var driveMode = 0       // -1 eco, 0 normal, 1 sport
     @Volatile var gear = "-"
     @Volatile var speedKmh = 0f
@@ -88,7 +90,7 @@ class SignalHub(private val ctx: Context, private val s: DriveState) {
         readWiperSwitch(v)
 
         val lowBeam = object : LightStateListener {
-            override fun onLightStateUpdated(state: LightState?) { s.night = state == LightState.ON }
+            override fun onLightStateUpdated(state: LightState?) { s.lowBeam = state == LightState.ON }
             override fun onFailed(e: Exception) = fail("전조등", e)
         }
         reg("전조등", { v.getLight().registerLowBeamLightState(lowBeam) }, { v.getLight().unregisterLowBeamLightState(lowBeam) })
