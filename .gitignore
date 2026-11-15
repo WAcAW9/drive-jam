@@ -14,3 +14,6 @@ captures/
 
 # demo recordings
 demo/out/
+
+# release signing (local only)
+keystore.properties
