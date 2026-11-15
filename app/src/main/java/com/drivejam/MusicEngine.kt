@@ -44,6 +44,8 @@ class MusicEngine(private val drive: DriveState) {
 
     /** Demo only: also write the rendered audio to this WAV file. */
     @Volatile var recordTo: java.io.File? = null
+    /** Test only: render the backing chorus alone. */
+    internal var chorusOnly = false
     /** Current sequencer step (0-15), for the demo visualizer. */
     @Volatile var stepNow = 0
         private set
@@ -137,6 +139,14 @@ class MusicEngine(private val drive: DriveState) {
     // sunset brass swell: three detuned saws on the chord, slow attack, filter opening with the envelope
     private val brPh = DoubleArray(3); private var brT = 9f; private var brA = 0f; private var brLp = 0f; private var brLevel = 0f
     private val brK = k(1.1f); private var wetNow = 0.3f
+    // backing chorus ("우 · 음 · 밥 · 워우"): three voices on the chord tones through one shared vowel filter
+    private val chPh = DoubleArray(3); private val chHz = DoubleArray(3)
+    private lateinit var chSyl: Syllable; private var chT = 9f; private var chLen = 1f; private var chVel = 0f
+    private var chAmp = 0f; private var chAmpS = 0f; private var chBreath = 0f; private var chVoice = 1f; private var chSrc = 0f; private var chCtl = 0
+    private var chorusNotes: List<Chorus.Note> = emptyList()
+    private val fz = FloatArray(6); private val fa1 = FloatArray(3); private val fa2 = FloatArray(3)
+    private val fin = FloatArray(3); private val fout = FloatArray(3)
+    private val chBuf = FloatArray(1024); private var chPos = 0 // ~13 ms doubler for stereo width
     // chords
     private val chordHz = DoubleArray(4); private var chordN = 3; private var arpIdx = 0
     // fx
@@ -287,10 +297,88 @@ class MusicEngine(private val drive: DriveState) {
             }
         }
 
+        if (step == 0) chorusNotes = if (cur.chorus && (l >= 3 || cur.traffic)) Chorus.bar(st, track.seed, bar, cur.traffic) else emptyList()
+        for (nt in chorusNotes) if (nt.step == step) sing(nt.syl, nt.len, nt.vel)
+
         val barIn = Song.melodyBar(bar)
         if (barIn >= 0) {
             val note = melody[barIn * 16 + step]
             if (note >= 0) trigLead(chordHz[note % chordN] * (if (note >= chordN) 4.0 else 2.0), if (sec == Song.Section.BREAK) 0.6f else 0.85f)
+        }
+    }
+
+    /** Formants (Hz) F1-F3 with bandwidths and gains. */
+    private class Vowel(val f: FloatArray, val bw: FloatArray, val g: FloatArray)
+    private fun vw(f1: Float, f2: Float, f3: Float, g2: Float = 0.6f, g3: Float = 0.2f) =
+        Vowel(floatArrayOf(f1, f2, f3), floatArrayOf(70f, 90f, 160f), floatArrayOf(1f, g2, g3))
+    private val vU = vw(320f, 800f, 2500f, 0.5f, 0.15f)
+    private val vO = vw(450f, 800f, 2800f, 0.5f, 0.15f)
+    private val vA = vw(800f, 1200f, 2800f, 0.7f, 0.25f)
+    private val vEo = vw(600f, 1000f, 2600f)
+    private val vI = vw(300f, 2300f, 3000f, 0.5f, 0.3f)
+    private val vE = vw(450f, 1900f, 2600f, 0.6f, 0.25f)
+    private val vM = Vowel(floatArrayOf(260f, 1300f, 2600f), floatArrayOf(60f, 300f, 400f), floatArrayOf(1f, 0.08f, 0.03f)) // lips closed
+    private val vD = vw(300f, 1700f, 2700f, 0.4f, 0.15f) // tongue at the teeth
+    private val vL = vw(350f, 1100f, 2700f, 0.5f, 0.2f)
+    private val vSh = vw(400f, 2200f, 3000f, 0.8f, 0.8f)
+
+    private enum class On { NONE, B, D, N, L, W, Y, SH }
+    private enum class Coda { NONE, P, M }
+    /** onset consonant, vowel (+ optional vowel it glides into), closing consonant. */
+    private class Syllable(val on: On, val v: Vowel, val glide: Vowel?, val coda: Coda)
+    private val SYL = mapOf(
+        "우" to Syllable(On.NONE, vU, null, Coda.NONE), "음" to Syllable(On.NONE, vM, null, Coda.NONE),
+        "아" to Syllable(On.NONE, vA, null, Coda.NONE), "오" to Syllable(On.NONE, vO, null, Coda.NONE),
+        "밥" to Syllable(On.B, vA, null, Coda.P), "바" to Syllable(On.B, vA, null, Coda.NONE),
+        "두" to Syllable(On.D, vU, null, Coda.NONE), "다" to Syllable(On.D, vA, null, Coda.NONE),
+        "둠" to Syllable(On.D, vU, null, Coda.M), "라" to Syllable(On.L, vA, null, Coda.NONE),
+        "나" to Syllable(On.N, vA, null, Coda.NONE), "워우" to Syllable(On.W, vEo, vU, Coda.NONE),
+        "와" to Syllable(On.W, vA, null, Coda.NONE), "예" to Syllable(On.Y, vE, null, Coda.NONE),
+        "야" to Syllable(On.Y, vA, null, Coda.NONE), "샤" to Syllable(On.SH, vA, null, Coda.NONE),
+    ).also { m -> require(Chorus.SYLLABLES.all { it in m }) { "chorus syllable without a sound" } }
+
+    private fun sing(name: String, steps: Int, v: Float) {
+        chSyl = SYL.getValue(name); chT = 0f; chVel = v
+        chLen = steps * samplesPerStep.toFloat() / sr
+        for (i in 0 until 3) chHz[i] = chordHz[i] * if (chSyl.v === vM && i == 0) 0.5 else 1.0 // hum: root an octave down
+    }
+
+    /** Control rate: where the mouth is now (formants) and how loud (envelope), from the syllable's progress. */
+    private fun vowelNow() {
+        val t = chT; val len = chLen; val s = chSyl
+        fun ramp(x: Float) = x.coerceIn(0f, 1f)
+        // onset: start shape and how long it takes to reach the vowel
+        val (from, onT) = when (s.on) {
+            On.NONE -> s.v to 0f
+            On.B -> vM to 0.03f
+            On.D -> vD to 0.025f
+            On.N -> vM to 0.06f
+            On.L -> vL to 0.05f
+            On.W -> vU to minOf(0.35f * len, 0.15f)
+            On.Y -> vI to minOf(0.3f * len, 0.12f)
+            On.SH -> vSh to 0.07f
+        }
+        val close = if (s.coda == Coda.NONE) len else len * 0.7f
+        var a: Vowel; var b: Vowel; var x: Float
+        if (t < onT) { a = from; b = s.v; x = t / onT }
+        else if (t >= close) { a = s.glide ?: s.v; b = vM; x = (t - close) / 0.03f }
+        else if (s.glide != null && t > len * 0.6f) { a = s.v; b = s.glide; x = (t - len * 0.6f) / (len * 0.4f) }
+        else { a = s.v; b = s.v; x = 0f }
+        x = ramp(x)
+        // envelope: soft swell for open vowels, quick for consonants; P cuts off, the rest fade out
+        val attack = when (s.on) { On.NONE -> ramp(t / 0.09f); On.N -> 0.6f + 0.4f * ramp(t / 0.06f); On.SH -> ramp((t - 0.05f) / 0.03f); else -> 0.35f + 0.65f * ramp(t / 0.03f) }
+        val release = if (s.coda == Coda.P) ramp(1f - (t - close) / 0.025f) else ramp((len - t) / (if (s.v === vM) 0.25f else 0.13f))
+        chAmp = attack * release
+        chVoice = if (s.on == On.SH && t < 0.05f) 0f else 1f
+        chBreath = if (s.on == On.SH && t < 0.07f) 0.6f else 0.05f
+        for (i in 0 until 3) {
+            val f = a.f[i] + (b.f[i] - a.f[i]) * x
+            val bw = a.bw[i] + (b.bw[i] - a.bw[i]) * x
+            val r = exp(-PI.toFloat() * bw / sr)
+            fa1[i] = 2f * r * sn(f.toDouble() / sr + 0.25)
+            fa2[i] = r * r
+            fin[i] = (1f - r) * 2f * sn(f.toDouble() / sr) // ~unity gain at the formant peak, whatever its frequency
+            fout[i] = a.g[i] + (b.g[i] - a.g[i]) * x
         }
     }
 
@@ -461,6 +549,32 @@ class MusicEngine(private val drive: DriveState) {
                 }
             }
 
+            // ---- backing chorus ----
+            var choir = 0f
+            if (chVel > 0f && chT < chLen + 0.05f) {
+                if (--chCtl <= 0) { chCtl = 32; vowelNow() }
+                chAmpS += (chAmp - chAmpS) * 0.02f
+                var src = 0f
+                for (v in 0 until 3) {
+                    val vib = 1.0 + 0.005 * sn(chT * (4.8 + 0.7 * v) + 0.3 * v)
+                    chPh[v] += chHz[v] * (1.0 + 0.004 * (v - 1)) * vib * pitchMul * dt
+                    if (chPh[v] >= 1.0) chPh[v] -= 1.0
+                    src += 2f * chPh[v].toFloat() - 1f
+                }
+                chSrc += (src - chSrc) * 0.3f // soften the buzz
+                val exc = chSrc * chVoice + noise() * chBreath * 3f
+                for (f in 0 until 3) {
+                    val y = fin[f] * exc + fa1[f] * fz[2 * f] - fa2[f] * fz[2 * f + 1]
+                    fz[2 * f + 1] = fz[2 * f]; fz[2 * f] = y
+                    choir += y * fout[f]
+                }
+                choir *= chAmpS * chVel * 0.4f
+                chT += dt
+            } else chAmpS = 0f
+            chBuf[chPos] = choir
+            val choirR = chBuf[(chPos + 1024 - 575) and 1023]
+            chPos = (chPos + 1) and 1023
+
             // ---- rain, vinyl ----
             var rainL = 0f; var rainR = 0f
             if (rain > 0f) {
@@ -488,7 +602,7 @@ class MusicEngine(private val drive: DriveState) {
             val melodyOut = lead * duck
             val rp = (dlPos - delayLen + sr) % sr
             val dL = dlL[rp]; val dR = dlR[rp]
-            val send = (tonal * 0.45f + melodyOut * 0.6f + hat * 0.35f) * xf
+            val send = (tonal * 0.45f + melodyOut * 0.6f + hat * 0.35f + choir * 0.5f) * xf
             dlL[dlPos] = send + dR * feedback
             dlR[dlPos] = dL * feedback
             dlPos = (dlPos + 1) % sr
@@ -496,6 +610,8 @@ class MusicEngine(private val drive: DriveState) {
             val center = (drums * 0.85f + bass + vinyl + crash) * xf
             var l = center + (tonal * (1 - pan) + melodyOut * (1 + pan * 0.5f) + hat * (1 - hatPan)) * xf + rainL + dL * wetNow
             var r = center + (tonal * (1 + pan) + melodyOut * (1 - pan * 0.5f) + hat * (1 + hatPan)) * xf + rainR + dR * wetNow
+            l += choir * xf; r += choirR * xf
+            if (chorusOnly) { l = (choir + dL * wetNow) * xf; r = (choirR + dR * wetNow) * xf }
             if (scratching && (sampleInStep * 4 / samplesPerStep) % 2 == 1) { l *= 0.25f; r *= 0.25f } // stutter
             outBuf[2 * i] = (softClip(l * g * 0.85f) * 32000f).toInt().toShort()
             outBuf[2 * i + 1] = (softClip(r * g * 0.85f) * 32000f).toInt().toShort()

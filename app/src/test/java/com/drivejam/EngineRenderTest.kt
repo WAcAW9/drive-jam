@@ -73,6 +73,22 @@ class EngineRenderTest {
         }
     }
 
+    @Test
+    fun backingChorusSingsInEveryStyle() {
+        assertTrue(Chorus.allNotes.all { it.syl in Chorus.SYLLABLES })
+        for (s in Style.entries) {
+            val e = MusicEngine(DriveState()).apply { load(Track(s, key = 0, seed = 42)); params = MusicConductorDefaults.forStyle(s); chorusOnly = true }
+            val pcm = ShortArray(44100 * 2 * 40); val buf = ShortArray(1024); var pos = 0
+            while (pos < pcm.size) { e.render(buf, 512); System.arraycopy(buf, 0, pcm, pos, minOf(buf.size, pcm.size - pos)); pos += buf.size }
+            writeWav(File(outDir, "chorus_${s.name.lowercase()}.wav"), pcm)
+            val rms = Math.sqrt(pcm.map { it.toDouble() * it }.average()) / 32768
+            val peak = pcm.maxOf { Math.abs(it.toInt()) } / 32768.0
+            println("%-10s chorus rms=%.3f peak=%.2f".format(s.name, rms, peak))
+            assertTrue("$s chorus silent", rms > 0.01)
+            assertTrue("$s chorus too loud", rms < 0.12)
+        }
+    }
+
     private data class Scene(val name: String, val sunset: Boolean, val tunnel: Boolean, val traffic: Boolean)
 
     @Test

@@ -38,6 +38,7 @@ data class MusicParams(
     val sunset: Boolean = false,  // brass swell
     val tunnel: Boolean = false,  // longer echo
     val traffic: Boolean = false, // thinner, softer, slower
+    val chorus: Boolean = true,   // wordless backing vocals
 )
 
 object MoodConductor {
