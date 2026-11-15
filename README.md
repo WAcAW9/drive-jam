@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/app-icon-512.png" width="120" alt="Drive JAM 앱 아이콘">
+<img src="assets/app-icon-512.png" width="120" alt="Drive JAM 앱 아이콘">
 
 # Drive JAM (드라이브 잼)
 
@@ -12,12 +12,12 @@
 
 2026 현대자동차그룹 차량용 앱 개발 공모전 출품작 · 팀 **TKAW**
 
-[**APK 내려받기**](apk/TKAW_DriveJAM_release.apk) · [**릴리스 (APK + 시연 영상)**](https://github.com/WAcAW9/drive-jam/releases/tag/v1.0.0) · [기획서](docs/proposal.md)
+[**APK 내려받기**](apk/TKAW_DriveJAM_release.apk) · [**릴리스 (APK + 시연 영상)**](https://github.com/WAcAW9/drive-jam/releases/tag/v1.0.0)
 
 </div>
 
 <p align="center">
-  <img src="docs/assets/screens/hero.jpg" width="100%" alt="Pleos Connect 에뮬레이터에서 실행 중인 Drive JAM. 왼쪽 홈 미디어 카드에 현재 곡이 표시된다">
+  <img src="assets/screens/hero.jpg" width="100%" alt="Pleos Connect 에뮬레이터에서 실행 중인 Drive JAM. 왼쪽 홈 미디어 카드에 현재 곡이 표시된다">
 </p>
 
 ---
@@ -33,7 +33,6 @@
 7. [동작 원리](#7-동작-원리)
 8. [프로젝트 구조](#8-프로젝트-구조)
 9. [소스에서 빌드하기](#9-소스에서-빌드하기)
-10. [문서](#10-문서)
 
 ---
 
@@ -142,24 +141,24 @@ UI는 이 앱 영역(1682 × 1210)을 기준으로 코드로 배치했고, 세�
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/assets/screens/setup.jpg" alt="출발 전 설정 화면"></td>
-    <td width="50%"><img src="docs/assets/screens/request.jpg" alt="문장 요청으로 시티팝으로 바뀐 화면"></td>
+    <td width="50%"><img src="assets/screens/setup.jpg" alt="출발 전 설정 화면"></td>
+    <td width="50%"><img src="assets/screens/request.jpg" alt="문장 요청으로 시티팝으로 바뀐 화면"></td>
   </tr>
   <tr>
     <td><b>출발 전 체크인</b><br>누구와, 어떤 기분인지 한 번 고르면 그 기분에 맞춰 천천히 시작해 이 드라이브의 분위기로 데려갑니다(동질성 원리).</td>
     <td><b>"~한 음악으로" 요청</b><br>"여름 바다 시티팝으로" → 장르가 완전히 바뀝니다. 앱 안의 사전이 문장을 장르와 분위기로 바꿉니다.</td>
   </tr>
   <tr>
-    <td><img src="docs/assets/screens/rain.jpg" alt="와이퍼로 빗소리가 깔린 화면"></td>
-    <td><img src="docs/assets/screens/tunnel.jpg" alt="터널에서 잔향이 늘어난 화면"></td>
+    <td><img src="assets/screens/rain.jpg" alt="와이퍼로 빗소리가 깔린 화면"></td>
+    <td><img src="assets/screens/tunnel.jpg" alt="터널에서 잔향이 늘어난 화면"></td>
   </tr>
   <tr>
     <td><b>차량 신호 = 악기</b><br>깜빡이는 하이햇, 핸들은 필터, 와이퍼는 빗소리. 버튼 대신 지금 소리가 왜 이런지 한 줄로 알려 줍니다.</td>
     <td><b>창밖과 길</b><br>낮에 전조등이 켜지면 터널로 보고 잔향을 늘립니다. 노을 무렵에는 브라스가 얹힙니다.</td>
   </tr>
   <tr>
-    <td><img src="docs/assets/screens/traffic.jpg" alt="정체 구간에서 잔잔하게 바뀐 화면"></td>
-    <td><img src="docs/assets/screens/arrival.jpg" alt="주차 후 오늘의 드라이브 카드"></td>
+    <td><img src="assets/screens/traffic.jpg" alt="정체 구간에서 잔잔하게 바뀐 화면"></td>
+    <td><img src="assets/screens/arrival.jpg" alt="주차 후 오늘의 드라이브 카드"></td>
   </tr>
   <tr>
     <td><b>정체 → 해소</b><br>막히면 드럼을 빼고 허밍만 남기고, 길이 뚫리면 리듬이 다시 들어옵니다.</td>
@@ -221,7 +220,7 @@ app/src/main/java/com/drivejam/
 app/src/test/       단위 테스트 21개 (무드, 요청 해석, 장면, 엔진 오프라인 렌더링)
 apk/                제출용 release APK
 demo/demo.py        시연 영상 자동 촬영 스크립트 (Virtual Console API + 화면 녹화 + 자막)
-docs/               기획서, 설계, SDK 매핑, 결정 기록, 시연 콘티
+assets/             README 이미지 (앱 아이콘, 시연 화면)
 ```
 
 ## 9. 소스에서 빌드하기
@@ -233,17 +232,7 @@ docs/               기획서, 설계, SDK 매핑, 결정 기록, 시연 콘티
 ```
 
 - release 서명은 Git에 올리지 않는 로컬 `keystore.properties`(`storeFile`, `storePassword`, `keyAlias`, `keyPassword`)에서 읽습니다. 파일이 없으면 debug 키로 서명해 설치 가능한 release APK를 만듭니다.
-- 시연 영상 다시 찍기: [`docs/demo-script.md`](docs/demo-script.md) (debug 빌드 필요).
-
-## 10. 문서
-
-| 문서 | 내용 |
-|---|---|
-| [docs/proposal.md](docs/proposal.md) | 기획서 원문 (배경, 기능, 시나리오, 개발 계획, 기대효과) |
-| [docs/design-music-engine.md](docs/design-music-engine.md) | 음악 엔진·무드 컨덕터 설계 |
-| [docs/sdk-mapping.md](docs/sdk-mapping.md) | 기능 ↔ SDK 매핑, 플랫폼 정책 대응 |
-| [docs/decisions.md](docs/decisions.md) | 주요 결정과 이유 |
-| [docs/demo-script.md](docs/demo-script.md) | 시연 영상 콘티와 연출 고지 |
+- 시연 영상 다시 찍기: debug 빌드를 설치하고 Virtual Console 페이지를 연 상태에서 `python demo/demo.py` (결과: `demo/out/drive-jam-demo.mp4`).
 
 ---
 

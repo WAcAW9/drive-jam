@@ -17,3 +17,6 @@ demo/out/
 
 # release signing (local only)
 keystore.properties
+
+# planning documents (local only)
+docs/
