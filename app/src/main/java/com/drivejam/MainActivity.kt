@@ -66,14 +66,9 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         Jam.init(this)
         val demoMode = isDebuggable() && intent.getBooleanExtra("demo", false)
-        if (demoMode) {
-            intent.getStringExtra("company")?.let { n -> Company.entries.find { it.name == n }?.let(Jam::setCompany) }
-            intent.getStringExtra("feeling")?.let { n -> Feeling.entries.find { it.name == n }?.let(Jam::setFeeling) }
-            Jam.fastTrajectory = true
-            Jam.engine.recordTo = java.io.File(filesDir, "jam.wav")
-        }
         demo = DemoView(this, drive, Jam.engine)
         setContentView(buildUi())
+        applyDemo(intent)
         if (Jam.track != null) { everPlayed = true; showSetup(false) } // reopened while playing
         if (demoMode && intent.getBooleanExtra("autoplay", false)) ui.postDelayed({ startJam() }, 1500)
         ui.post(ticker)
@@ -88,6 +83,7 @@ class MainActivity : Activity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (!isDebuggable()) return
+        applyDemo(intent)
         if (intent.getBooleanExtra("play", false)) startJam()
         if (intent.getBooleanExtra("stop", false)) Jam.pause()
         if (intent.getBooleanExtra("next", false)) Jam.next()
@@ -98,6 +94,19 @@ class MainActivity : Activity() {
         if (intent.hasExtra("speed")) { drive.speedFromDev = true; drive.speedKmh = intent.getFloatExtra("speed", 0f) }
         if (intent.hasExtra("lowbeam")) drive.lowBeam = intent.getBooleanExtra("lowbeam", false)
         if (intent.hasExtra("brake")) drive.brake = intent.getBooleanExtra("brake", false)
+    }
+
+    /**
+     * Demo setup (debug builds only): who / feeling, fast trajectory, WAV tee, and with "reset" a clean start
+     * without killing the process (killing it would leave the car's home media card on a dead session).
+     */
+    private fun applyDemo(i: Intent) {
+        if (!isDebuggable() || !i.getBooleanExtra("demo", false)) return
+        if (i.getBooleanExtra("reset", false)) { Jam.resetForDemo(); everPlayed = false; shownTrack = null; showSetup(true) }
+        i.getStringExtra("company")?.let { n -> Company.entries.find { it.name == n }?.let(Jam::setCompany) }
+        i.getStringExtra("feeling")?.let { n -> Feeling.entries.find { it.name == n }?.let(Jam::setFeeling) }
+        Jam.fastTrajectory = true
+        Jam.engine.recordTo = java.io.File(filesDir, "jam.wav")
     }
 
     private fun isDebuggable() = (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
@@ -136,6 +145,8 @@ class MainActivity : Activity() {
         val now = System.currentTimeMillis()
         val t = Jam.track
         if (t != shownTrack && t != null) showTrack(t)
+        companyChips.forEachIndexed { i, c -> paint(c, i == Jam.company.ordinal) }
+        feelingChips.forEachIndexed { i, c -> paint(c, i == Jam.feeling.ordinal) }
         Jam.lastCard.let { if (it != shownCard) { shownCard = it; if (it != null) fillArrival(it) } }
         layoutCenter()
         if (t == null) {

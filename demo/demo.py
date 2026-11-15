@@ -1,6 +1,6 @@
-"""Record the Drive Jam demo video, fully scripted.
+"""Record the Drive JAM demo video, fully scripted.
 
-Drives the Pleos Connect Virtual Console REST API on a timeline, records the emulator screen,
+Drives the Pleos Connect Virtual Console REST API on a timeline, records the whole emulator screen,
 takes the app's own audio (WAV written by the debug build), then muxes video + audio + captions.
 
 Prereqs: Pleos emulator running, debug APK installed, `adb forward tcp:8088 tcp:8088`, ffmpeg on PATH.
@@ -21,33 +21,35 @@ ACT = f"{PKG}/com.drivejam.MainActivity"
 OUT = Path(__file__).parent / "out"
 FONT = "C\\:/Windows/Fonts/malgunbd.ttf"  # escaped for ffmpeg drawtext
 TASKBAR_ICON = (1482, 1370)  # Drive Jam icon in the Pleos taskbar (2560x1440)
-DURATION = 126
-# Show only the Drive Jam panel (the console's own driving sim drives the cluster speedometer, which would
-# disagree with the scripted speed); 1920x1080 recording -> app panel -> padded 1080p.
-CROP = "crop=1260:906:640:68,scale=-2:940,pad=1920:1080:(ow-iw)/2:0:color=0x14121F"  # captions go in the 140px strip
+DURATION = 104
+# Whole screen (cluster, home media card, taskbar and the app), scaled down to leave a caption strip at the bottom.
+FRAME = "scale=1728:972,pad=1920:1080:96:0:color=0x111111"
 
 # (start, end, caption) — seconds from recording start
 CAPTIONS = [
-    (0, 6, "출발 전 · 누구와 '친구들', 기분 '피곤해'"),
-    (6, 12, "잼 시작 · 차가 지금 이 드라이브에 맞는 곡을 고릅니다"),
-    (12, 20, "말하듯 요청 · '여름 바다 시티팝으로' → 장르가 완전히 바뀝니다"),
-    (20, 30, "출발 · 차속(주행거리 변화로 계산)에 따라 템포가 움직입니다"),
-    (30, 39, "차선 변경 · 깜빡이 = 하이햇, 핸들 = 필터와 소리 방향"),
-    (39, 49, "비가 온다 · 와이퍼 Low → High = 빗소리가 촘촘해집니다"),
-    (49, 57, "마음에 안 들면 '다음 곡' · 다른 장르의 새 곡으로 (스티어링 휠 버튼도 됩니다)"),
-    (57, 65, "터널 · 낮에 전조등이 켜지면 터널로 보고 잔향을 늘립니다"),
-    (65, 76, "해 질 녘 · 노을 무렵엔 브라스가 부풀어 오릅니다 (시각은 연출)"),
-    (76, 81, "앞차 급정거 · 브레이크 + 차속 급감 → 곡이 '멈칫'했다가 이어집니다"),
-    (81, 97, "정체 · 막히는 길에선 드럼을 빼고 잔잔하게 (판정 시간은 시연용으로 단축)"),
-    (97, 104, "길이 뚫리면 · 리듬이 다시 들어옵니다"),
-    (104, 111, "도착 · 감속하고 기어 P"),
-    (111, 121, "주차하면 오늘의 드라이브가 한 곡으로 · 드라이버 카드와 도감 스탬프"),
-    (121, 126, "Drive JAM — 내 운전이 그대로 음악이 됩니다"),
+    (0, 5, "출발 전 · 누구와 '친구들', 기분 '피곤해'"),
+    (5, 10, "잼 시작 · 차가 지금 이 드라이브에 맞는 곡을 고릅니다"),
+    (10, 16, "말하듯 요청 · '여름 바다 시티팝으로' → 장르가 바뀝니다"),
+    (16, 22, "출발 · 차속에 따라 템포가 움직이고, 가사 없는 백코러스가 얹힙니다"),
+    (22, 28, "차선 변경 · 깜빡이 = 하이햇, 핸들 = 필터와 소리 방향"),
+    (28, 36, "비 · 와이퍼 Low → High = 빗소리가 촘촘해집니다"),
+    (36, 42, "마음에 안 들면 '다음 곡' · 홈 화면 미디어 카드와 스티어링 휠 버튼도 됩니다"),
+    (42, 49, "터널 · 낮에 전조등이 켜지면 잔향이 길어집니다"),
+    (49, 57, "해 질 녘 · 노을 무렵엔 브라스가 얹힙니다 (시각은 연출)"),
+    (57, 61, "급정거 · 곡이 '멈칫'했다가 이어집니다"),
+    (61, 76, "정체 · 막히면 드럼을 빼고 허밍만 (판정 시간은 시연용으로 단축)"),
+    (76, 84, "길이 뚫리면 · 리듬이 다시 들어옵니다"),
+    (84, 92, "도착 · 감속하고 기어 P"),
+    (92, 100, "오늘의 드라이브가 한 곡으로 · 드라이버 카드와 도감 스탬프"),
+    (100, 104, "Drive JAM — 내 운전이 그대로 음악이 됩니다"),
 ]
 
 # speed keyframes (t, km/h); linear in between
-SPEED = [(0, 0), (20, 0), (28, 60), (70, 60), (75, 90), (76, 90), (77.5, 40), (80, 10), (84, 6), (88, 12), (92, 6),
-         (96, 8), (99, 50), (104, 50), (110, 0), (126, 0)]
+SPEED = [(0, 0), (16, 0), (22, 60), (52, 60), (56, 85), (57, 85), (59.5, 10), (64, 6), (68, 12), (72, 6), (76, 8),
+         (79, 50), (85, 50), (91, 0), (104, 0)]
+
+# brake / steering as last set by the timeline: every controls PUT carries all three, or the console resets the others
+CONTROLS = {"brake": 0, "steering": 0}
 
 
 def odometer_now():
@@ -59,6 +61,12 @@ def odometer_now():
 def put(path):
     req = urllib.request.Request(CONSOLE + path, method="PUT")
     urllib.request.urlopen(req, timeout=5).read()
+
+
+def put_controls(speed, **changed):
+    CONTROLS.update(changed)
+    acc = 4 if speed > 0 and CONTROLS["brake"] == 0 else 0  # a touch of throttle, or the console's physics coasts the cluster down
+    put(f"/vehicle/controls?speed={speed:.0f}&accelerator={acc}&brake={CONTROLS['brake']}&steering={CONTROLS['steering']}")
 
 
 def adb(*args, check=False):
@@ -76,9 +84,9 @@ def steering_ramp(t0, peak, up, hold, down):
     """Schedule steering 0 → peak → 0 as (t, action) pairs."""
     acts, n = [], 6
     for i in range(1, n + 1):
-        acts.append((t0 + up * i / n, f"/vehicle/controls?steering={peak * i / n:.0f}"))
+        acts.append((t0 + up * i / n, f"STEER:{peak * i / n:.0f}"))
     for i in range(1, n + 1):
-        acts.append((t0 + up + hold + down * i / n, f"/vehicle/controls?steering={peak * (1 - i / n):.0f}"))
+        acts.append((t0 + up + hold + down * i / n, f"STEER:{peak * (1 - i / n):.0f}"))
     return acts
 
 
@@ -98,7 +106,7 @@ def bring_app_to_front():
             return
         adb("shell", "input", "tap", *map(str, TASKBAR_ICON))
         time.sleep(2.5)
-    raise SystemExit("could not bring Drive Jam to the front")
+    raise SystemExit("could not bring Drive JAM to the front")
 
 
 def main():
@@ -109,48 +117,48 @@ def main():
         raise SystemExit(f"Virtual Console not reachable ({e}). Open http://127.0.0.1:8088/ in a browser first.")
     # 1) reset the car
     for p in ["/vehicle/gear?gear=Park", "/vehicle/turn-signal?mode=Off", "/vehicle/body?front_wiper=Off",
-              "/vehicle/lights?feature=headlamp_mode&value=Off", "/vehicle/controls?brake=0",
-              "/vehicle/controls?steering=0", "/vehicle/controls?speed=0"]:
+              "/vehicle/lights?feature=headlamp_mode&value=Off"]:
         put(p)
+    put_controls(0, brake=0, steering=0)
 
-    # 2) fresh app in demo mode
-    adb("shell", "am", "force-stop", PKG)
+    # 2) app back to "before the first drive". No force-stop: the home media card stays bound to the live session.
     user = adb("shell", "am", "get-current-user").stdout.strip() or "0"
-    adb("shell", "run-as", PKG, "--user", user, "rm", "-f", "shared_prefs/jam_stamps.xml")  # fresh stamp collection
-    intent("--ez", "demo", "true", "--es", "company", "FRIENDS", "--es", "feeling", "TIRED")
-    time.sleep(4)
+    intent()
+    time.sleep(3)
     adb("shell", "input", "keyevent", "111")  # ESC: close any system popup (e.g. the profile menu)
+    adb("shell", "input", "swipe", "150", "1190", "750", "1190", "300")  # left panel widget -> its first page (media card)
     bring_app_to_front()
-    command("noop", "--ef", "hour", "14.0")  # an afternoon drive; the sunset scene moves the clock later
-    time.sleep(1)
+    for _ in range(4):  # the car may auto-resume its last media source after boot: make sure we start silent
+        command("demo", "--ez", "reset", "true", "--es", "company", "FRIENDS", "--es", "feeling", "TIRED", "--ef", "hour", "14.0")
+        time.sleep(3)
+        if "state=PLAYING" not in adb("shell", "dumpsys", "media_session").stdout.split("package=" + PKG, 1)[-1][:600]:
+            break
 
     # 3) timeline
     acts = [
-        (6, "PLAY"),
-        (12, "REQ:여름 바다 시티팝으로"),
-        (20, "/vehicle/gear?gear=Drive"),
-        (30, "/vehicle/turn-signal?mode=BlinkLeft"),
-        (36, "/vehicle/turn-signal?mode=Off"),
-        (39, "/vehicle/body?front_wiper=Low"),
-        (43, "/vehicle/body?front_wiper=High"),
-        (48, "/vehicle/body?front_wiper=Off"),
-        (50, "NEXT"),
-        (57, "/vehicle/lights?feature=headlamp_mode&value=LowBeam"),  # daytime + low beam = tunnel
-        (63.5, "/vehicle/lights?feature=headlamp_mode&value=Off"),
-        (65, "HOUR:17.0"),  # Nov sunset ~17:24 -> the sunset window
-        (76, "/vehicle/controls?brake=85"),
-        (78, "/vehicle/controls?brake=0"),
-        (82, "/vehicle/controls?brake=40"), (83, "/vehicle/controls?brake=0"),  # stop-and-go
-        (86, "/vehicle/controls?brake=40"), (87, "/vehicle/controls?brake=0"),
-        (90, "/vehicle/controls?brake=40"), (91, "/vehicle/controls?brake=0"),
-        (93.5, "/vehicle/controls?brake=40"), (94.5, "/vehicle/controls?brake=0"),
-        (108, "/vehicle/controls?brake=30"),
-        (111, "/vehicle/gear?gear=Park"),
-        (111.5, "/vehicle/controls?brake=0"),
-        (121, "STOP"),
-    ] + steering_ramp(30.5, 140, 2.0, 2.0, 2.0)
+        (5, "PLAY"),
+        (10, "REQ:여름 바다 시티팝으로"),
+        (16, "/vehicle/gear?gear=Drive"),
+        (22, "/vehicle/turn-signal?mode=BlinkLeft"),
+        (27, "/vehicle/turn-signal?mode=Off"),
+        (28, "/vehicle/body?front_wiper=Low"),
+        (31, "/vehicle/body?front_wiper=High"),
+        (34, "/vehicle/body?front_wiper=Off"),
+        (36, "NEXT"),
+        (42, "/vehicle/lights?feature=headlamp_mode&value=LowBeam"),  # daytime + low beam = tunnel
+        (48.5, "/vehicle/lights?feature=headlamp_mode&value=Off"),
+        (49, "HOUR:17.0"),  # Nov sunset ~17:24 -> the sunset window
+        (57, "BRAKE:85"), (59.5, "BRAKE:0"),
+        (61, "BRAKE:40"), (62, "BRAKE:0"), (64, "BRAKE:40"), (65, "BRAKE:0"),  # stop-and-go
+        (67, "BRAKE:40"), (68, "BRAKE:0"), (70, "BRAKE:40"), (71, "BRAKE:0"), (73, "BRAKE:40"), (74, "BRAKE:0"),
+        (89, "BRAKE:30"),
+        (92, "/vehicle/gear?gear=Park"),
+        (92.5, "BRAKE:0"),
+        (100, "STOP"),
+    ] + steering_ramp(22.5, 140, 1.5, 1.5, 1.5)
     acts.sort(key=lambda a: a[0])
 
+    adb("logcat", "-G", "16M")  # the system logs a lot; keep the "wav start/end" markers until we read them
     adb("logcat", "-c")
     h0 = time.time()
     dev_ms = int(adb("shell", "date", "+%s%3N").stdout.strip())
@@ -172,7 +180,8 @@ def main():
             last = now
             try:
                 put(f"/vehicle/odometer?traveled_distance_km={km:.4f}")
-                # no /vehicle/controls?speed=…: it re-publishes every control and releases the brake
+                if CONTROLS["brake"] == 0:  # while braking, let the console's own physics slow the cluster down
+                    put_controls(v)  # the cluster speedometer shows the same speed the app computes
             except OSError as e:
                 print("odometer put failed:", e)
             time.sleep(0.25)
@@ -189,6 +198,10 @@ def main():
         elif action.startswith("REQ:"):
             b64 = base64.b64encode(action[4:].encode("utf-8")).decode()
             adb("shell", "am", "start", "-f", "0x30000000", "-n", ACT, "--es", "request_b64", b64)
+        elif action.startswith("BRAKE:"):
+            put_controls(speed_at(time.time() - t0), brake=int(action[6:]))
+        elif action.startswith("STEER:"):
+            put_controls(speed_at(time.time() - t0), steering=int(action[6:]))
         elif action.startswith("HOUR:"):
             command("noop", "--ef", "hour", action[5:])
         elif action == "STOP":
@@ -231,13 +244,13 @@ def main():
     for i, (_, _, c) in enumerate(CAPTIONS):
         (OUT / f"cap{i}.txt").write_text(c, encoding="utf-8")
     draw = ",".join(
-        f"drawtext=fontfile='{FONT}':textfile=cap{i}.txt:enable='between(t,{a},{b})':x=(w-text_w)/2:y=h-98:"
-        f"fontsize=40:fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=18"
+        f"drawtext=fontfile='{FONT}':textfile=cap{i}.txt:enable='between(t,{a},{b})':x=(w-text_w)/2:y=h-72:"
+        f"fontsize=38:fontcolor=white:box=1:boxcolor=black@0.0:boxborderw=12"
         for i, (a, b, _) in enumerate(CAPTIONS)
     )
     subprocess.run([
         "ffmpeg", "-y", "-v", "error", "-i", video.name, "-i", wav.name,
-        "-filter_complex", f"[0:v]fps=30,{CROP},{draw}[v];[1:a]atempo={tempo:.4f},adelay={delay_ms}|{delay_ms},apad[a]",
+        "-filter_complex", f"[0:v]fps=30,{FRAME},{draw}[v];[1:a]atempo={tempo:.4f},adelay={delay_ms}|{delay_ms},apad[a]",
         "-map", "[v]", "-map", "[a]", "-t", str(DURATION), "-c:v", "libx264", "-preset", "medium", "-crf", "20",
         "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", final.name,
     ], check=True, cwd=OUT)

@@ -49,13 +49,27 @@ class JamService : MediaBrowserService() {
 
     private fun publish() {
         val t = Jam.track
-        if (t != null) {
+        if (t == null) { // nothing chosen yet: say so on the car's media card instead of keeping an old title
             session.setMetadata(
                 MediaMetadata.Builder()
+                    .putString(MediaMetadata.METADATA_KEY_TITLE, "Drive JAM")
+                    .putString(MediaMetadata.METADATA_KEY_ARTIST, "오늘의 드라이브를 시작해 보세요")
+                    .build()
+            )
+        } else {
+            session.setMetadata(
+                MediaMetadata.Builder()
+                    .putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "jam-${t.seed}")
                     .putString(MediaMetadata.METADATA_KEY_TITLE, t.title)
+                    .putString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE, t.title)
+                    .putString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE, t.artist)
+                    .putString(MediaMetadata.METADATA_KEY_ALBUM, "Drive JAM")
+                    .putLong(MediaMetadata.METADATA_KEY_DURATION, -1)
                     .putString(MediaMetadata.METADATA_KEY_ARTIST, t.artist)
                     .putString(MediaMetadata.METADATA_KEY_GENRE, t.style.label)
                     .putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, CoverArt.of(t, 320))
+                    .putBitmap(MediaMetadata.METADATA_KEY_ART, CoverArt.of(t, 320))
+                    .putBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON, CoverArt.of(t, 320))
                     .build()
             )
         }

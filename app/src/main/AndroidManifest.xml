@@ -41,6 +41,8 @@
             <intent-filter>
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
+            <!-- We also have our own launcher screen; opt in so the car still lists us as a media source (home media card) -->
+            <meta-data android:name="androidx.car.app.launchable" android:value="true" />
         </service>
     </application>
 </manifest>

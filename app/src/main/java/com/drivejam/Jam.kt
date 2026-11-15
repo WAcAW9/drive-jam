@@ -250,6 +250,15 @@ object Jam {
 
     fun dismissCard() { lastCard = null; changed() }
 
+    /** Demo only: back to "before the first drive" without restarting the process. */
+    fun resetForDemo() {
+        pause()
+        track = null; history.clear(); startedAt = 0L; request = Mood(0f, 0f); understood = null
+        trip = null; lastCard = null; clockOverride = null
+        stamps.edit().clear().apply()
+        changed()
+    }
+
     /** One plain sentence about why the music sounds like this right now. */
     fun hint(now: Long = System.currentTimeMillis()): String = when {
         drive.scratchUntil > now -> "급정거해서 곡이 잠깐 멈칫했어요"
