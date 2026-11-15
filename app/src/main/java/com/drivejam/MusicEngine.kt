@@ -146,7 +146,11 @@ class MusicEngine(private val drive: DriveState) {
     private var chorusNotes: List<Chorus.Note> = emptyList()
     private val fz = FloatArray(6); private val fa1 = FloatArray(3); private val fa2 = FloatArray(3)
     private val fin = FloatArray(3); private val fout = FloatArray(3)
-    private val chBuf = FloatArray(1024); private var chPos = 0 // ~13 ms doubler for stereo width
+    // humanizing: each singer scoops into the note, wanders a little, comes in a few ms late, vibrato blooms late
+    private val chScoop = FloatArray(3); private val chDrift = FloatArray(3); private val chLate = IntArray(3)
+    private val chFlow = FloatArray(3); private val chVibRate = floatArrayOf(5.1f, 5.6f, 4.7f)
+    private var chLp = 0f
+    private val chBuf = FloatArray(2048); private var chPos = 0; private var ensPh = 0.0 // ensemble (moving short delays)
     // chords
     private val chordHz = DoubleArray(4); private var chordN = 3; private var arpIdx = 0
     // fx
@@ -340,7 +344,11 @@ class MusicEngine(private val drive: DriveState) {
     private fun sing(name: String, steps: Int, v: Float) {
         chSyl = SYL.getValue(name); chT = 0f; chVel = v
         chLen = steps * samplesPerStep.toFloat() / sr
-        for (i in 0 until 3) chHz[i] = chordHz[i] * if (chSyl.v === vM && i == 0) 0.5 else 1.0 // hum: root an octave down
+        for (i in 0 until 3) {
+            chHz[i] = chordHz[i] * if (chSyl.v === vM && i == 0) 0.5 else 1.0 // hum: root an octave down
+            chScoop[i] = if (chSyl.on == On.NONE || chSyl.on == On.N) 0.965f else 0.983f // ~60 / 30 cents under
+            chLate[i] = if (i == 0) 0 else (rnd01() * 0.028f * sr).toInt()
+        }
     }
 
     /** Control rate: where the mouth is now (formants) and how loud (envelope), from the syllable's progress. */
@@ -350,7 +358,7 @@ class MusicEngine(private val drive: DriveState) {
         // onset: start shape and how long it takes to reach the vowel
         val (from, onT) = when (s.on) {
             On.NONE -> s.v to 0f
-            On.B -> vM to 0.03f
+            On.B -> vM to 0.04f
             On.D -> vD to 0.025f
             On.N -> vM to 0.06f
             On.L -> vL to 0.05f
@@ -367,10 +375,10 @@ class MusicEngine(private val drive: DriveState) {
         x = ramp(x)
         // envelope: soft swell for open vowels, quick for consonants; P cuts off, the rest fade out
         val attack = when (s.on) { On.NONE -> ramp(t / 0.09f); On.N -> 0.6f + 0.4f * ramp(t / 0.06f); On.SH -> ramp((t - 0.05f) / 0.03f); else -> 0.35f + 0.65f * ramp(t / 0.03f) }
-        val release = if (s.coda == Coda.P) ramp(1f - (t - close) / 0.025f) else ramp((len - t) / (if (s.v === vM) 0.25f else 0.13f))
+        val release = if (s.coda == Coda.P) ramp(1f - (t - close) / 0.045f) else ramp((len - t) / (if (s.v === vM) 0.25f else 0.13f))
         chAmp = attack * release
         chVoice = if (s.on == On.SH && t < 0.05f) 0f else 1f
-        chBreath = if (s.on == On.SH && t < 0.07f) 0.6f else 0.05f
+        chBreath = if (s.on == On.SH && t < 0.07f) 0.35f else if (s.v === vM) 0.04f else 0.09f
         for (i in 0 until 3) {
             val f = a.f[i] + (b.f[i] - a.f[i]) * x
             val bw = a.bw[i] + (b.bw[i] - a.bw[i]) * x
@@ -554,26 +562,45 @@ class MusicEngine(private val drive: DriveState) {
             if (chVel > 0f && chT < chLen + 0.05f) {
                 if (--chCtl <= 0) { chCtl = 32; vowelNow() }
                 chAmpS += (chAmp - chAmpS) * 0.02f
-                var src = 0f
+                var src = 0f; var breath = 0f
                 for (v in 0 until 3) {
-                    val vib = 1.0 + 0.005 * sn(chT * (4.8 + 0.7 * v) + 0.3 * v)
-                    chPh[v] += chHz[v] * (1.0 + 0.004 * (v - 1)) * vib * pitchMul * dt
+                    val tv = chT - chLate[v] * dt
+                    if (tv < 0f) continue
+                    chScoop[v] += (1f - chScoop[v]) * 0.0005f            // glide up into the note (~50 ms)
+                    chDrift[v] += (noise() * 0.004f - chDrift[v]) * 0.0003f // slow wander, ~±0.2 %
+                    val vib = 0.006f * ((tv - 0.25f) / 0.4f).coerceIn(0f, 1f) * sn((tv * chVibRate[v]).toDouble())
+                    val f = chHz[v] * chScoop[v] * (1f + chDrift[v] + vib)
+                    chPh[v] += f * pitchMul * dt
                     if (chPh[v] >= 1.0) chPh[v] -= 1.0
-                    src += 2f * chPh[v].toFloat() - 1f
+                    // Rosenberg glottal pulse (opens over 40 % of the cycle, closes over 16 %); its derivative drives the vocal tract
+                    val ph = chPh[v].toFloat()
+                    val flow = if (ph < 0.4f) 0.5f * (1f - sn(ph / 0.8 + 0.25)) else if (ph < 0.56f) sn((ph - 0.4) / 0.64 + 0.25) else 0f
+                    src += (flow - chFlow[v]) * (sr / f.toFloat()) * 0.12f * (1f + chDrift[v] * 20f)
+                    chFlow[v] = flow
+                    breath += flow
                 }
-                chSrc += (src - chSrc) * 0.3f // soften the buzz
-                val exc = chSrc * chVoice + noise() * chBreath * 3f
+                val exc = src * chVoice + noise() * chBreath * (0.6f + breath)
                 for (f in 0 until 3) {
                     val y = fin[f] * exc + fa1[f] * fz[2 * f] - fa2[f] * fz[2 * f + 1]
                     fz[2 * f + 1] = fz[2 * f]; fz[2 * f] = y
                     choir += y * fout[f]
                 }
-                choir *= chAmpS * chVel * 0.4f
+                choir *= chAmpS * chVel * 0.62f
                 chT += dt
             } else chAmpS = 0f
+            chLp += (choir - chLp) * 0.45f // take the edge off above ~4 kHz
+            choir = chLp
+            // ensemble: two slowly moving short delays (18 / 24 ms) make three synths sound like a group in a room
             chBuf[chPos] = choir
-            val choirR = chBuf[(chPos + 1024 - 575) and 1023]
-            chPos = (chPos + 1) and 1023
+            ensPh += dt
+            fun tap(ms: Double): Float {
+                val d = ms * sr / 1000.0; val p = chPos - d + 2048
+                val i0 = p.toInt(); val fr = (p - i0).toFloat()
+                return chBuf[i0 and 2047] * (1 - fr) + chBuf[(i0 + 1) and 2047] * fr
+            }
+            val choirL = choir * 0.7f + tap(18.0 + 3.0 * sn(ensPh * 0.43)) * 0.5f
+            val choirR = choir * 0.7f + tap(24.0 + 4.0 * sn(ensPh * 0.61 + 0.3)) * 0.5f
+            chPos = (chPos + 1) and 2047
 
             // ---- rain, vinyl ----
             var rainL = 0f; var rainR = 0f
@@ -602,7 +629,7 @@ class MusicEngine(private val drive: DriveState) {
             val melodyOut = lead * duck
             val rp = (dlPos - delayLen + sr) % sr
             val dL = dlL[rp]; val dR = dlR[rp]
-            val send = (tonal * 0.45f + melodyOut * 0.6f + hat * 0.35f + choir * 0.5f) * xf
+            val send = (tonal * 0.45f + melodyOut * 0.6f + hat * 0.35f + choir * 0.7f) * xf
             dlL[dlPos] = send + dR * feedback
             dlR[dlPos] = dL * feedback
             dlPos = (dlPos + 1) % sr
@@ -610,8 +637,8 @@ class MusicEngine(private val drive: DriveState) {
             val center = (drums * 0.85f + bass + vinyl + crash) * xf
             var l = center + (tonal * (1 - pan) + melodyOut * (1 + pan * 0.5f) + hat * (1 - hatPan)) * xf + rainL + dL * wetNow
             var r = center + (tonal * (1 + pan) + melodyOut * (1 - pan * 0.5f) + hat * (1 + hatPan)) * xf + rainR + dR * wetNow
-            l += choir * xf; r += choirR * xf
-            if (chorusOnly) { l = (choir + dL * wetNow) * xf; r = (choirR + dR * wetNow) * xf }
+            l += choirL * xf; r += choirR * xf
+            if (chorusOnly) { l = (choirL + dL * wetNow) * xf; r = (choirR + dR * wetNow) * xf }
             if (scratching && (sampleInStep * 4 / samplesPerStep) % 2 == 1) { l *= 0.25f; r *= 0.25f } // stutter
             outBuf[2 * i] = (softClip(l * g * 0.85f) * 32000f).toInt().toShort()
             outBuf[2 * i + 1] = (softClip(r * g * 0.85f) * 32000f).toInt().toShort()
