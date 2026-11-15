@@ -137,7 +137,7 @@ UI는 이 앱 영역(1682 × 1210)을 기준으로 코드로 배치했고, 세�
 
 ## 6. 주요 기능과 시연 화면
 
-> 전체 흐름은 104초 시연 영상에 담겨 있습니다: [Release v1.0.0](https://github.com/WAcAW9/drive-jam/releases/tag/v1.0.0)의 `drive-jam-demo.mp4`
+> 전체 흐름은 1분 55초 시연 영상(장면별 챕터 · 실시간 차량 신호 패널)에 담겨 있습니다: [Release v1.0.0](https://github.com/WAcAW9/drive-jam/releases/tag/v1.0.0)의 `drive-jam-demo.mp4`
 
 <table>
   <tr>
