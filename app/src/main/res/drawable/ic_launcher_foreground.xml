@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Drive Jam: a sunset made of level-meter bars, resting on the horizon, with the road running into it. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M29.50,60.00V50.66a2.30,2.30 0,0 1,4.60,0V60.00zM36.90,60.00V40.92a2.30,2.30 0,0 1,4.60,0V60.00zM44.30,60.00V40.86a2.30,2.30 0,0 1,4.60,0V60.00zM51.70,60.00V36.30a2.30,2.30 0,0 1,4.60,0V60.00zM59.10,60.00V40.86a2.30,2.30 0,0 1,4.60,0V60.00zM66.50,60.00V40.92a2.30,2.30 0,0 1,4.60,0V60.00zM73.90,60.00V50.66a2.30,2.30 0,0 1,4.60,0V60.00z"/>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M25,62.2h58a1.4,1.4 0,0 1,0 2.8h-58a1.4,1.4 0,0 1,0 -2.8z"/>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M50.6,66.5L47.4,66.5L33.5,87.5L39.5,87.5Z"/>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M57.4,66.5L60.6,66.5L74.5,87.5L68.5,87.5Z"/>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M53.2,67.5h1.6v3.4h-1.6z M52.8,73.8h2.4v4.8h-2.4z M52.3,81.6h3.4v5.9h-3.4z"/>
+</vector>
