@@ -17,7 +17,7 @@
 </div>
 
 <p align="center">
-  <img src="assets/screens/hero.jpg" width="100%" alt="시연 영상 4장 터널·노을: 해 질 녘이 되자 브라스가 얹히고, 오른쪽 패널에 실시간 차량 신호가 표시된다">
+  <img src="assets/screens/hero.jpg" width="100%" alt="Pleos Connect 에뮬레이터에서 실행 중인 Drive JAM. 왼쪽 홈 미디어 카드에 현재 곡이 표시된다">
 </p>
 
 ---
@@ -139,40 +139,30 @@ UI는 이 앱 영역(1682 × 1210)을 기준으로 코드로 배치했고, 세�
 
 > 전체 흐름은 1분 55초 시연 영상(장면별 챕터 · 실시간 차량 신호 패널)에 담겨 있습니다: [Release v1.0.0](https://github.com/WAcAW9/drive-jam/releases/tag/v1.0.0)의 `drive-jam-demo.mp4`
 
-모든 화면은 시연 영상에서 캡처했습니다. 오른쪽 패널은 그 순간 Virtual Console로 넣은 **실제 차량 신호**(주황 = 방금 바뀐 신호), 아래 줄은 그때 음악에 일어난 일입니다.
-
 <table>
   <tr>
-    <td width="50%"><img src="assets/screens/setup.jpg" alt="출발 전 체크인: 누구와 친구들, 기분 피곤해"></td>
-    <td width="50%"><img src="assets/screens/request.jpg" alt="문장 요청: 여름 바다 시티팝으로 장르가 바뀜"></td>
+    <td width="50%"><img src="assets/screens/setup.jpg" alt="출발 전 설정 화면"></td>
+    <td width="50%"><img src="assets/screens/request.jpg" alt="문장 요청으로 시티팝으로 바뀐 화면"></td>
   </tr>
   <tr>
-    <td><b>① 출발 전 체크인</b><br>누구와, 어떤 기분인지 한 번 고르면 그 기분에서 시작해 이 드라이브의 분위기로 천천히 데려갑니다(동질성 원리).</td>
-    <td><b>① "~한 음악으로" 요청</b><br>"여름 바다 시티팝으로" 한 문장에 장르가 바뀝니다. 앱 안의 사전이 문장을 장르와 분위기로 해석합니다.</td>
+    <td><b>출발 전 체크인</b><br>누구와, 어떤 기분인지 한 번 고르면 그 기분에 맞춰 천천히 시작해 이 드라이브의 분위기로 데려갑니다(동질성 원리).</td>
+    <td><b>"~한 음악으로" 요청</b><br>"여름 바다 시티팝으로" → 장르가 완전히 바뀝니다. 앱 안의 사전이 문장을 장르와 분위기로 바꿉니다.</td>
   </tr>
   <tr>
-    <td><img src="assets/screens/play.jpg" alt="차선 변경: 깜빡이와 핸들 신호가 강조된 화면"></td>
-    <td><img src="assets/screens/rain.jpg" alt="비: 와이퍼 High 신호와 빗소리"></td>
+    <td><img src="assets/screens/rain.jpg" alt="와이퍼로 빗소리가 깔린 화면"></td>
+    <td><img src="assets/screens/tunnel.jpg" alt="터널에서 잔향이 늘어난 화면"></td>
   </tr>
   <tr>
-    <td><b>② 운전이 곧 악기</b><br>깜빡이는 하이햇, 핸들은 필터와 소리 방향, 속도는 템포. 차선을 바꾸는 순간이 곧 연주입니다.</td>
-    <td><b>③ 날씨가 곡에 스며듦</b><br>와이퍼 Low → High에 빗소리가 촘촘해집니다. 마음에 안 들면 '다음 곡' 한 번(홈 카드·휠 버튼도).</td>
+    <td><b>차량 신호 = 악기</b><br>깜빡이는 하이햇, 핸들은 필터, 와이퍼는 빗소리. 버튼 대신 지금 소리가 왜 이런지 한 줄로 알려 줍니다.</td>
+    <td><b>창밖과 길</b><br>낮에 전조등이 켜지면 터널로 보고 잔향을 늘립니다. 노을 무렵에는 브라스가 얹힙니다.</td>
   </tr>
   <tr>
-    <td><img src="assets/screens/tunnel.jpg" alt="터널: 낮에 하향등이 켜져 잔향이 길어짐"></td>
-    <td><img src="assets/screens/traffic.jpg" alt="정체: 브레이크 반복에 드럼을 빼고 허밍만"></td>
+    <td><img src="assets/screens/traffic.jpg" alt="정체 구간에서 잔잔하게 바뀐 화면"></td>
+    <td><img src="assets/screens/arrival.jpg" alt="주차 후 오늘의 드라이브 카드"></td>
   </tr>
   <tr>
-    <td><b>④ 터널 · 노을</b><br>낮에 전조등이 켜지면 터널로 보고 잔향을 늘립니다. 노을 무렵에는 브라스가 차오릅니다(맨 위 사진).</td>
-    <td><b>⑤ 급정거 · 정체</b><br>급정거엔 0.6초 멈칫, 막히면 드럼을 빼고 허밍만 남깁니다.</td>
-  </tr>
-  <tr>
-    <td><img src="assets/screens/clear.jpg" alt="정체 해소: 속도가 오르며 리듬 복귀"></td>
-    <td><img src="assets/screens/arrival.jpg" alt="도착: 오늘의 드라이브 카드와 도감 스탬프"></td>
-  </tr>
-  <tr>
-    <td><b>⑤ 길이 뚫리면</b><br>속도가 다시 오르면 리듬이 돌아옵니다.</td>
-    <td><b>⑥ 오늘의 드라이브 카드</b><br>기어 P에서 그날 주행이 한 곡이 됩니다. 드라이버 카드는 모두 칭찬이고, 도감은 속도가 아니라 '순간'(빗길·노을·터널·함께 탄 차…)을 모읍니다.</td>
+    <td><b>정체 → 해소</b><br>막히면 드럼을 빼고 허밍만 남기고, 길이 뚫리면 리듬이 다시 들어옵니다.</td>
+    <td><b>오늘의 드라이브 카드</b><br>주차하면 그날 주행이 한 곡이 됩니다. 드라이버 카드는 모두 칭찬이고, 도감은 속도가 아니라 '순간'(빗길·노을·터널·함께 탄 차…)을 모읍니다.</td>
   </tr>
 </table>
 
